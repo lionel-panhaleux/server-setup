@@ -1,0 +1,32 @@
+# Managed by Ansible — do not edit manually
+Port 22
+AddressFamily any
+ListenAddress 0.0.0.0
+ListenAddress ::
+
+# Authentication
+PermitRootLogin no
+PasswordAuthentication no
+PubkeyAuthentication yes
+AuthorizedKeysFile .ssh/authorized_keys
+ChallengeResponseAuthentication no
+UsePAM yes
+
+# Disable unused auth methods
+KerberosAuthentication no
+GSSAPIAuthentication no
+HostbasedAuthentication no
+PermitEmptyPasswords no
+
+# Forwarding
+X11Forwarding no
+AllowTcpForwarding no
+AllowAgentForwarding no
+
+# Misc
+PrintMotd no
+AcceptEnv LANG LC_*
+Subsystem sftp /usr/lib/openssh/sftp-server
+MaxAuthTries 3
+ClientAliveInterval 300
+ClientAliveCountMax 2

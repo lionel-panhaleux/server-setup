@@ -1,0 +1,31 @@
+name: Server Setup
+
+on:
+  workflow_dispatch:
+
+jobs:
+  setup:
+    name: Run system setup
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Ansible
+        run: pip install ansible
+
+      - name: Configure SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+      - name: Run setup playbook
+        run: |
+          ansible-playbook playbook.yml \
+            -i "${{ secrets.DEPLOY_HOST }}," \
+            --tags setup \
+            --private-key ~/.ssh/deploy_key \
+            --user lpanhaleux
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: "false"
