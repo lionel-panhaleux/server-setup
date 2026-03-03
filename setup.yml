@@ -1,0 +1,133 @@
+---
+# System setup (as deploy user, via CI)
+# Usage: ansible-playbook setup.yml -i "HOST," --user deploy
+- name: System setup
+  hosts: all
+  tasks:
+    - name: Update apt cache and upgrade all packages
+      ansible.builtin.apt:
+        update_cache: true
+        upgrade: full
+        cache_valid_time: 3600
+
+    - name: Install base packages
+      ansible.builtin.apt:
+        name:
+          - unattended-upgrades
+          - logrotate
+          - nginx
+          - certbot
+          - python3-certbot-nginx
+          - python3-venv
+          - python3-dev
+          - python3-pip
+          - postgresql
+          - postgresql-client
+          - libpq-dev
+          - python3-psycopg2
+          - gcc
+          - make
+          - curl
+          - rsync
+          - git
+          - acl
+        state: present
+
+    - name: Enable automatic security updates
+      ansible.builtin.copy:
+        content: |
+          APT::Periodic::Update-Package-Lists "1";
+          APT::Periodic::Unattended-Upgrade "1";
+          APT::Periodic::AutocleanInterval "7";
+        dest: /etc/apt/apt.conf.d/20auto-upgrades
+        mode: "0644"
+
+    - name: Install uv
+      ansible.builtin.get_url:
+        dest: /usr/local/bin/uv
+        mode: "0755"
+        url: https://github.com/astral-sh/uv/releases/latest/download/uv-linux-x86_64
+
+    - name: Deploy hardened sshd config
+      ansible.builtin.template:
+        src: templates/sshd_config.j2
+        dest: /etc/ssh/sshd_config
+        mode: "0644"
+        validate: "sshd -t -f %s"
+      notify: Restart sshd
+
+    - name: Allow SSH through UFW
+      community.general.ufw:
+        rule: allow
+        port: "22"
+        proto: tcp
+
+    - name: Allow HTTP through UFW
+      community.general.ufw:
+        rule: allow
+        port: "80"
+        proto: tcp
+
+    - name: Allow HTTPS through UFW
+      community.general.ufw:
+        rule: allow
+        port: "443"
+        proto: tcp
+
+    - name: Enable UFW with deny-by-default policy
+      community.general.ufw:
+        state: enabled
+        policy: deny
+        direction: incoming
+
+    - name: Remove default nginx site
+      ansible.builtin.file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+      notify: Reload nginx
+
+    - name: Ensure nginx is enabled and running
+      ansible.builtin.service:
+        name: nginx
+        state: started
+        enabled: true
+
+    - name: Ensure certbot timer is enabled
+      ansible.builtin.systemd:
+        name: certbot.timer
+        state: started
+        enabled: true
+
+    - name: Ensure logrotate timer is enabled
+      ansible.builtin.systemd:
+        name: logrotate.timer
+        state: started
+        enabled: true
+
+    - name: Ensure tmp files cleanup timer is enabled
+      ansible.builtin.systemd:
+        name: systemd-tmpfiles-clean.timer
+        state: started
+        enabled: true
+
+    - name: Check if reboot is required
+      ansible.builtin.stat:
+        path: /var/run/reboot-required
+      register: reboot_required
+
+    - name: Warn if reboot is required
+      ansible.builtin.debug:
+        msg: "REBOOT REQUIRED: A kernel or system update needs a reboot to take effect."
+      when: reboot_required.stat.exists
+      changed_when: true
+
+  handlers:
+    - name: Restart sshd
+      ansible.builtin.service:
+        name: sshd
+        state: restarted
+
+    - name: Reload nginx
+      ansible.builtin.service:
+        name: nginx
+        state: reloaded

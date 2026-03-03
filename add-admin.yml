@@ -1,0 +1,28 @@
+---
+# Add a sudo user with SSH key access
+# Usage: ansible-playbook add-admin.yml -i "HOST," --user root \
+#        -e "username=deploy" -e "ssh_key='ssh-ed25519 AAAA...'"
+- name: Add admin user
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Create user
+      ansible.builtin.user:
+        name: "{{ username }}"
+        shell: /bin/bash
+        groups: sudo
+        append: true
+        create_home: true
+
+    - name: Grant passwordless sudo
+      ansible.builtin.copy:
+        content: "{{ username }} ALL=(ALL) NOPASSWD:ALL\n"
+        dest: "/etc/sudoers.d/{{ username }}"
+        mode: "0440"
+        validate: "visudo -cf %s"
+
+    - name: Add SSH authorized key
+      ansible.posix.authorized_key:
+        user: "{{ username }}"
+        key: "{{ ssh_key }}"
+        state: present

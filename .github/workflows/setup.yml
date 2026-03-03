@@ -22,10 +22,9 @@ jobs:
 
       - name: Run setup playbook
         run: |
-          ansible-playbook playbook.yml \
+          ansible-playbook setup.yml \
             -i "${{ secrets.DEPLOY_HOST }}," \
-            --tags setup \
             --private-key ~/.ssh/deploy_key \
-            --user lpanhaleux
+            --user deploy
         env:
           ANSIBLE_HOST_KEY_CHECKING: "false"
