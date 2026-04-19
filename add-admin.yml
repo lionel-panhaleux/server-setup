@@ -1,7 +1,7 @@
 ---
 # Add a sudo user with SSH key access
 # Usage: ansible-playbook add-admin.yml -i "HOST," --user root \
-#        -e "username=deploy" -e "ssh_key='ssh-ed25519 AAAA...'"
+#        -e "username=deploy" -e "ssh_key_file=~/.ssh/deploy.pub"
 - name: Add admin user
   hosts: all
   gather_facts: false
@@ -24,5 +24,5 @@
     - name: Add SSH authorized key
       ansible.posix.authorized_key:
         user: "{{ username }}"
-        key: "{{ ssh_key }}"
+        key: "{{ lookup('file', ssh_key_file) }}"
         state: present

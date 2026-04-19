@@ -1,4 +1,4 @@
-name: Server Setup
+name: Distribution Upgrade
 
 on:
   workflow_dispatch:
@@ -11,10 +11,14 @@ on:
           - gravelines
           - strasbourg
           - frankfurt
+      confirm:
+        description: Execute the upgrade (unchecked = check only)
+        type: boolean
+        default: false
 
 jobs:
-  setup:
-    name: Run system setup
+  upgrade:
+    name: Run distribution upgrade
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -30,6 +34,6 @@ jobs:
           chmod 600 ~/.ssh/deploy
           yq '.host_key' inventory/host_vars/${{ inputs.host }}.yml >> ~/.ssh/known_hosts
 
-      - name: Run setup playbook
+      - name: Run upgrade playbook
         run: |
-          ansible-playbook setup.yml --limit "${{ inputs.host }}"
+          ansible-playbook upgrade.yml --limit "${{ inputs.host }}" -e confirm=${{ inputs.confirm }}

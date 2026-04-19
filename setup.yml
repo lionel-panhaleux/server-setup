@@ -1,6 +1,6 @@
 ---
 # System setup (as deploy user, via CI)
-# Usage: ansible-playbook setup.yml -i "HOST," --user deploy
+# Usage: ansible-playbook setup.yml --limit HOST --user deploy
 - name: System setup
   hosts: all
   tasks:
@@ -15,6 +15,7 @@
         name:
           - unattended-upgrades
           - logrotate
+          - ufw
           - nginx
           - certbot
           - python3-certbot-nginx
@@ -43,10 +44,13 @@
         mode: "0644"
 
     - name: Install uv
-      ansible.builtin.get_url:
-        dest: /usr/local/bin/uv
-        mode: "0755"
-        url: https://github.com/astral-sh/uv/releases/latest/download/uv-linux-x86_64
+      ansible.builtin.unarchive:
+        src: "https://github.com/astral-sh/uv/releases/latest/download/uv-{{ ansible_facts['architecture'] }}-unknown-linux-gnu.tar.gz"
+        dest: /usr/local/bin
+        remote_src: true
+        extra_opts:
+          - --strip-components=1
+        creates: /usr/local/bin/uv
 
     - name: Deploy hardened sshd config
       ansible.builtin.template:
@@ -109,6 +113,20 @@
         name: systemd-tmpfiles-clean.timer
         state: started
         enabled: true
+
+    - name: Read SSH host ed25519 public key
+      ansible.builtin.slurp:
+        src: /etc/ssh/ssh_host_ed25519_key.pub
+      register: ssh_host_pubkey
+
+    - name: Write host key to inventory
+      ansible.builtin.copy:
+        content: |
+          host_key: "{{ ansible_host }} {{ ssh_host_pubkey.content | b64decode | trim }}"
+        dest: "{{ playbook_dir }}/inventory/host_vars/{{ inventory_hostname }}.yml"
+        mode: "0644"
+      delegate_to: localhost
+      become: false
 
     - name: Check if reboot is required
       ansible.builtin.stat:

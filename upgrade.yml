@@ -1,0 +1,104 @@
+---
+# Distribution upgrade
+# Check (default):  ansible-playbook upgrade.yml --limit HOST --user deploy
+# Execute:          ansible-playbook upgrade.yml --limit HOST --user deploy -e confirm=true
+- name: Distribution upgrade
+  hosts: all
+  vars:
+    confirm: false
+  tasks:
+    - name: Check Ubuntu release
+      ansible.builtin.command: do-release-upgrade -c
+      register: ubuntu_check
+      changed_when: false
+      failed_when: false
+      when: ansible_facts['distribution'] == 'Ubuntu'
+
+    - name: Check Debian stable codename
+      ansible.builtin.uri:
+        url: https://deb.debian.org/debian/dists/stable/Release
+        return_content: true
+      register: debian_stable
+      when: ansible_facts['distribution'] == 'Debian'
+
+    - name: Determine target (Ubuntu)
+      ansible.builtin.set_fact:
+        target_release: >-
+          {{ (ubuntu_check.stdout ~ ubuntu_check.stderr)
+             | regex_search("New release '([^']+)'", '\1')
+             | first | default(ansible_facts['distribution_release']) }}
+        upgrade_available: "{{ ubuntu_check.rc == 0 }}"
+      when: ansible_facts['distribution'] == 'Ubuntu'
+
+    - name: Determine target (Debian)
+      ansible.builtin.set_fact:
+        target_release: "{{ debian_stable.content | regex_search('Codename:\\s*(\\S+)', '\\1') | first }}"
+        upgrade_available: "{{ (debian_stable.content | regex_search('Codename:\\s*(\\S+)', '\\1') | first) != ansible_facts['distribution_release'] }}"
+      when: ansible_facts['distribution'] == 'Debian'
+
+    - name: Status
+      ansible.builtin.debug:
+        msg: >-
+          {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }} ({{ ansible_facts['distribution_release'] }})
+          {{ '→ ' ~ target_release if upgrade_available | bool else '— up to date' }}
+
+    - name: Execute upgrade
+      when: confirm | bool and upgrade_available | bool
+      block:
+        - name: Settle current release
+          ansible.builtin.apt:
+            update_cache: true
+            upgrade: full
+            autoremove: true
+
+        - name: Upgrade Ubuntu
+          when: ansible_facts['distribution'] == 'Ubuntu'
+          block:
+            - name: Ensure update-manager-core
+              ansible.builtin.apt:
+                name: update-manager-core
+                state: present
+
+            - name: Run do-release-upgrade
+              ansible.builtin.command: do-release-upgrade -f DistUpgradeViewNonInteractive
+              register: ubuntu_upgrade
+              changed_when: true
+
+        - name: Upgrade Debian
+          when: ansible_facts['distribution'] == 'Debian'
+          block:
+            - name: Find apt source files
+              ansible.builtin.find:
+                paths:
+                  - /etc/apt
+                  - /etc/apt/sources.list.d
+                patterns: "*.list,*.sources"
+                file_type: file
+              register: apt_sources
+
+            - name: Rewrite codename in source files
+              ansible.builtin.replace:
+                path: "{{ item.path }}"
+                regexp: '\b{{ ansible_facts["distribution_release"] }}\b'
+                replace: "{{ target_release }}"
+              loop: "{{ apt_sources.files }}"
+
+            - name: Dist-upgrade
+              ansible.builtin.apt:
+                update_cache: true
+                upgrade: full
+                autoremove: true
+
+        - name: Reboot
+          ansible.builtin.reboot:
+            msg: Reboot after distribution upgrade
+            reboot_timeout: 1200
+            post_reboot_delay: 10
+
+        - name: Re-gather facts
+          ansible.builtin.setup:
+            gather_subset: distribution
+
+        - name: Confirm new release
+          ansible.builtin.debug:
+            msg: "Now running {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }} ({{ ansible_facts['distribution_release'] }})"

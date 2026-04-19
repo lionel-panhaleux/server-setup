@@ -1,0 +1,4 @@
+[servers]
+gravelines     ansible_host=152.228.170.51
+strasbourg     ansible_host=51.178.45.139
+frankfurt      ansible_host=57.129.110.107
