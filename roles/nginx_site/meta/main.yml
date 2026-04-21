@@ -1,0 +1,7 @@
+---
+galaxy_info:
+  author: lpanhaleux
+  description: Deploy an nginx site (static / SPA / reverse proxy) with Let's Encrypt and journald logging.
+  license: MIT
+  min_ansible_version: "2.14"
+dependencies: []

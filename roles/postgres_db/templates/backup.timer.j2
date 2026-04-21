@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily pg_dump backup of {{ postgres_db_name }}
+
+[Timer]
+OnCalendar={{ postgres_db_backup_schedule }}
+Persistent=true
+RandomizedDelaySec=30m
+Unit={{ postgres_db_backup_unit_name }}.service
+
+[Install]
+WantedBy=timers.target

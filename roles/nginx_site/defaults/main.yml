@@ -1,0 +1,23 @@
+---
+# Required:
+#   nginx_site_name:     short identifier — used for file/symlink names and the journald tag
+#                        (defaults to the play-level `service_name` so a single var
+#                        flows to both nginx_site and postgres_db)
+#   nginx_site_domain:   primary hostname (e.g. "api.krcg.org")
+#   nginx_site_type:     static | spa | proxy
+
+nginx_site_name: "{{ service_name | default('') }}"
+
+# For nginx_site_type: static | spa | proxy
+nginx_site_root: ""
+
+# For nginx_site_type: proxy  (WSGI/ASGI upstream, e.g. gunicorn/uvicorn)
+nginx_site_upstream: ""        # "http://127.0.0.1:8000" or "http://unix:/run/krcg.sock"
+
+# Optional
+nginx_site_aliases: []                  # additional server_name entries
+nginx_site_open_api_paths: []           # path prefixes that get permissive CORS
+nginx_site_plain_http_paths: []         # path prefixes served over plain HTTP (no HTTPS redirect)
+nginx_site_client_max_body_size: "10m"
+nginx_site_extra_locations: ""          # raw nginx snippet appended to the HTTPS server
+nginx_site_log_tag: "{{ nginx_site_name }}"   # journalctl -t <this> filters this site's nginx logs

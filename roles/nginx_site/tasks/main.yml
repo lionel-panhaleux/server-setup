@@ -1,0 +1,77 @@
+---
+- name: Validate inputs
+  ansible.builtin.assert:
+    that:
+      - nginx_site_name | length > 0
+      - nginx_site_domain | length > 0
+      - nginx_site_type in ["static", "spa", "proxy"]
+      - (nginx_site_type != "proxy") or (nginx_site_upstream | length > 0)
+      - (nginx_site_type == "proxy") or (nginx_site_root | length > 0)
+    fail_msg: "nginx_site_name, nginx_site_domain, nginx_site_type and its companion (nginx_site_root or nginx_site_upstream) are required"
+
+- name: Ensure certbot webroot
+  ansible.builtin.file:
+    path: /var/www/certbot
+    state: directory
+    owner: www-data
+    group: www-data
+    mode: "0755"
+
+- name: Install websocket upgrade map (shared)
+  ansible.builtin.copy:
+    dest: /etc/nginx/conf.d/upgrade_map.conf
+    content: |
+      map $http_upgrade $connection_upgrade {
+          default upgrade;
+          ''      close;
+      }
+    mode: "0644"
+  notify: Reload nginx
+
+- name: Check for existing TLS certificate
+  ansible.builtin.stat:
+    path: "/etc/letsencrypt/live/{{ nginx_site_domain }}/fullchain.pem"
+  register: nginx_site_cert
+
+- name: Render site config (HTTP-only until cert exists)
+  ansible.builtin.template:
+    src: site.conf.j2
+    dest: "/etc/nginx/sites-available/{{ nginx_site_name }}.conf"
+    mode: "0644"
+  vars:
+    cert_exists: "{{ nginx_site_cert.stat.exists }}"
+  notify: Reload nginx
+
+- name: Enable site
+  ansible.builtin.file:
+    src: "/etc/nginx/sites-available/{{ nginx_site_name }}.conf"
+    dest: "/etc/nginx/sites-enabled/{{ nginx_site_name }}.conf"
+    state: link
+  notify: Reload nginx
+
+- name: Reload nginx before requesting certificate
+  ansible.builtin.meta: flush_handlers
+
+- name: Request Let's Encrypt certificate
+  ansible.builtin.command:
+    cmd: >-
+      certbot certonly --webroot -w /var/www/certbot
+      -d {{ nginx_site_domain }}
+      {% for a in nginx_site_aliases %}-d {{ a }} {% endfor %}
+      --non-interactive --agree-tos --register-unsafely-without-email
+    creates: "/etc/letsencrypt/live/{{ nginx_site_domain }}/fullchain.pem"
+  when: not nginx_site_cert.stat.exists
+
+- name: Re-check certificate
+  ansible.builtin.stat:
+    path: "/etc/letsencrypt/live/{{ nginx_site_domain }}/fullchain.pem"
+  register: nginx_site_cert
+
+- name: Render final site config with HTTPS
+  ansible.builtin.template:
+    src: site.conf.j2
+    dest: "/etc/nginx/sites-available/{{ nginx_site_name }}.conf"
+    mode: "0644"
+  vars:
+    cert_exists: "{{ nginx_site_cert.stat.exists }}"
+  notify: Reload nginx

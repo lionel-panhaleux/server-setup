@@ -1,0 +1,40 @@
+---
+# Required on setup and restore:
+#   postgres_db_name:      database name (defaults to the play-level `service_name`,
+#                          so a single var flows to both nginx_site and postgres_db)
+#   postgres_db_user:      role that owns the database
+# Required on setup only:
+#   postgres_db_password:  user password (use Ansible Vault)
+
+postgres_db_name: "{{ service_name | default('') }}"
+postgres_db_password: ""
+
+# Per-database timeouts (tuned for web apps; override with SET LOCAL in batch jobs)
+postgres_db_statement_timeout: "15s"                       # caps individual query time
+postgres_db_idle_in_transaction_session_timeout: "60s"     # kills forgotten open transactions
+postgres_db_lock_timeout: "5s"                             # fails fast on lock contention
+
+# Backup / restore
+postgres_db_backup_dir: /var/backups/postgres
+postgres_db_backup_file: ""                   # restore: required path to a .dump to restore from
+postgres_db_backup_retention_days: 7          # prune dumps older than this after each scheduled backup
+
+# Scheduled backup (systemd timer, installed by the role's main task)
+postgres_db_backup_schedule: "daily"          # OnCalendar= expression, e.g. "daily", "*-*-* 03:00:00"
+postgres_db_backup_unit_name: "{{ postgres_db_name }}-db"   # systemd unit name → journalctl -u <this>
+postgres_db_log_tag: "{{ postgres_db_name }}"          # SyslogIdentifier → journalctl -t <this>
+
+# Remote backup to S3-compatible object storage (e.g. Scaleway, R2). When
+# enabled, each scheduled dump is uploaded via restic (encrypted, deduplicated)
+# to <endpoint>/<bucket>/<postgres_db_name>. Credentials (access/secret key,
+# restic password) must already exist on the host at
+# /etc/postgres-backup/remote.env — server-setup's setup.yml writes that file
+# when its own play-level `remote_backup_enabled` is true. The credentials
+# file is shared across all DBs on the host; the bucket path per DB is
+# rendered into the systemd unit.
+postgres_db_remote_backup_enabled: false
+postgres_db_remote_backup_endpoint: "https://s3.fr-par.scw.cloud"   # scaleway paris; nl-ams, pl-waw also available — path-style, no bucket prefix
+postgres_db_remote_backup_bucket: ""                                 # consumer app must set this (matches the bucket created on the provider)
+postgres_db_remote_backup_keep_daily: 7
+postgres_db_remote_backup_keep_weekly: 4
+postgres_db_remote_backup_keep_monthly: 12

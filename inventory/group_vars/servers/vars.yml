@@ -1,0 +1,9 @@
+ansible_user: deploy
+ansible_ssh_private_key_file: ~/.ssh/deploy
+
+# Host-level flag consumed by setup.yml only — when true, it writes
+# /etc/postgres-backup/remote.env from the vault_remote_backup_* secrets in
+# the sibling vault.yml (shared restic creds for any DB on this host).
+# Per-DB opt-in is a separate decision made in each consumer app's playbook
+# via postgres_db_remote_backup_enabled (they don't read this inventory).
+remote_backup_enabled: true

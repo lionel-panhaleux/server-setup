@@ -1,0 +1,118 @@
+{% set server_names = [nginx_site_domain] + nginx_site_aliases %}
+{% set log_tag = nginx_site_log_tag %}
+{% macro log_directives() -%}
+    access_log syslog:server=unix:/dev/log,tag={{ log_tag }},nohostname combined;
+    error_log  syslog:server=unix:/dev/log,tag={{ log_tag }},nohostname warn;
+{%- endmacro %}
+{% macro cors_block() -%}
+        add_header Access-Control-Allow-Origin  "*" always;
+        add_header Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS" always;
+        add_header Access-Control-Allow-Headers "Authorization, Content-Type" always;
+        add_header Access-Control-Max-Age       "86400" always;
+        if ($request_method = OPTIONS) { return 204; }
+{%- endmacro %}
+{% macro proxy_block() -%}
+        proxy_pass {{ nginx_site_upstream }};
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade           $http_upgrade;
+        proxy_set_header Connection        $connection_upgrade;
+        proxy_read_timeout 60s;
+{%- endmacro %}
+
+# {{ nginx_site_name }} — managed by server-setup/nginx_site
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name {{ server_names | join(' ') }};
+
+{{ log_directives() }}
+    client_max_body_size {{ nginx_site_client_max_body_size }};
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+{% for path in nginx_site_plain_http_paths %}
+    location {{ path }} {
+{% if nginx_site_type == "proxy" %}
+{{ proxy_block() }}
+{% else %}
+        root {{ nginx_site_root }};
+        try_files $uri $uri/ =404;
+{% endif %}
+    }
+{% endfor %}
+
+{% if cert_exists %}
+    location / {
+        return 301 https://$host$request_uri;
+    }
+{% else %}
+    location / {
+        return 503 "TLS certificate not yet provisioned\n";
+    }
+{% endif %}
+}
+
+{% if cert_exists %}
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name {{ server_names | join(' ') }};
+
+    ssl_certificate     /etc/letsencrypt/live/{{ nginx_site_domain }}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/{{ nginx_site_domain }}/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+{{ log_directives() }}
+    client_max_body_size {{ nginx_site_client_max_body_size }};
+
+{% for path in nginx_site_open_api_paths %}
+    location {{ path }} {
+{{ cors_block() }}
+{% if nginx_site_type == "proxy" %}
+{{ proxy_block() }}
+{% else %}
+        root {{ nginx_site_root }};
+        try_files $uri $uri/ =404;
+{% endif %}
+    }
+{% endfor %}
+
+{% if nginx_site_type == "static" %}
+    root {{ nginx_site_root }};
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+{% elif nginx_site_type == "spa" %}
+    root {{ nginx_site_root }};
+    index index.html;
+
+    # Long-cache hashed build assets
+    location ~* \.(?:js|css|woff2?|png|jpg|jpeg|gif|svg|webp|ico)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        try_files $uri =404;
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+{% elif nginx_site_type == "proxy" %}
+    location / {
+{{ proxy_block() }}
+    }
+{% endif %}
+
+{{ nginx_site_extra_locations }}
+}
+{% endif %}

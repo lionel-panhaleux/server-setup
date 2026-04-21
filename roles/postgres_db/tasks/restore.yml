@@ -1,0 +1,34 @@
+---
+- name: Validate inputs
+  ansible.builtin.assert:
+    that:
+      - postgres_db_name | length > 0
+      - postgres_db_user | length > 0
+      - postgres_db_backup_file | length > 0
+    fail_msg: "postgres_db_name, postgres_db_user and postgres_db_backup_file are required for restore"
+
+- name: Warn about destructive restore
+  ansible.builtin.debug:
+    msg: "About to drop and recreate {{ postgres_db_name }} from {{ postgres_db_backup_file }}"
+
+- name: Drop existing database
+  community.postgresql.postgresql_db:
+    name: "{{ postgres_db_name }}"
+    state: absent
+  become: true
+  become_user: postgres
+
+- name: Recreate empty database
+  community.postgresql.postgresql_db:
+    name: "{{ postgres_db_name }}"
+    owner: "{{ postgres_db_user }}"
+    state: present
+  become: true
+  become_user: postgres
+
+- name: Restore from dump
+  ansible.builtin.command:
+    cmd: "pg_restore --no-owner --role {{ postgres_db_user }} -d {{ postgres_db_name }} {{ postgres_db_backup_file }}"
+  become: true
+  become_user: postgres
+  changed_when: true

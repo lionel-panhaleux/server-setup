@@ -32,6 +32,7 @@
           - rsync
           - git
           - acl
+          - restic
         state: present
 
     - name: Enable automatic security updates
@@ -114,6 +115,68 @@
         state: started
         enabled: true
 
+    - name: Locate postgres conf.d directories
+      ansible.builtin.find:
+        paths: /etc/postgresql
+        patterns: conf.d
+        recurse: true
+        file_type: directory
+      register: pg_confd_dirs
+
+    - name: Configure postgres log_line_prefix to include database name
+      ansible.builtin.copy:
+        dest: "{{ item.path }}/50-log-prefix.conf"
+        content: |
+          # Managed by server-setup.
+          # %d puts the database name in every session log line so
+          # `journalctl -u postgresql -g "@<db>"` scopes engine logs to that DB.
+          log_line_prefix = '[%p] %q@%d '
+        mode: "0644"
+      loop: "{{ pg_confd_dirs.files }}"
+      loop_control:
+        label: "{{ item.path }}"
+      notify: Restart postgresql
+
+    - name: Install applog helper script
+      ansible.builtin.copy:
+        src: files/applog.sh
+        dest: /usr/local/bin/applog
+        mode: "0755"
+
+    - name: Assert remote backup secrets are present
+      ansible.builtin.assert:
+        that:
+          - vault_remote_backup_access_key | default('') | length > 0
+          - vault_remote_backup_secret_key | default('') | length > 0
+          - vault_remote_backup_restic_password | default('') | length > 0
+        fail_msg: >-
+          remote_backup_enabled=true requires vault_remote_backup_access_key,
+          vault_remote_backup_secret_key, vault_remote_backup_restic_password
+          in inventory (vault-encrypted)
+      when: remote_backup_enabled | default(false)
+
+    - name: Ensure remote backup config dir exists
+      ansible.builtin.file:
+        path: /etc/postgres-backup
+        state: directory
+        owner: root
+        group: postgres
+        mode: "0750"
+      when: remote_backup_enabled | default(false)
+
+    - name: Write remote backup credentials
+      ansible.builtin.copy:
+        content: |
+          AWS_ACCESS_KEY_ID={{ vault_remote_backup_access_key }}
+          AWS_SECRET_ACCESS_KEY={{ vault_remote_backup_secret_key }}
+          RESTIC_PASSWORD={{ vault_remote_backup_restic_password }}
+        dest: /etc/postgres-backup/remote.env
+        owner: root
+        group: postgres
+        mode: "0640"
+      when: remote_backup_enabled | default(false)
+      no_log: true
+
     - name: Read SSH host ed25519 public key
       ansible.builtin.slurp:
         src: /etc/ssh/ssh_host_ed25519_key.pub
@@ -149,3 +212,8 @@
       ansible.builtin.service:
         name: nginx
         state: reloaded
+
+    - name: Restart postgresql
+      ansible.builtin.service:
+        name: postgresql
+        state: restarted
