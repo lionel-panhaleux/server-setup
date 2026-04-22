@@ -33,8 +33,8 @@ postgres_db_log_tag: "{{ postgres_db_name }}"          # SyslogIdentifier → jo
 # file is shared across all DBs on the host; the bucket path per DB is
 # rendered into the systemd unit.
 postgres_db_remote_backup_enabled: false
-postgres_db_remote_backup_endpoint: "https://s3.fr-par.scw.cloud"   # scaleway paris; nl-ams, pl-waw also available — path-style, no bucket prefix
-postgres_db_remote_backup_bucket: ""                                 # consumer app must set this (matches the bucket created on the provider)
+postgres_db_remote_backup_endpoint: "https://s3.fr-par.scw.cloud"  # scaleway paris
+postgres_db_remote_backup_bucket: "krcg-db-backups"  # global backup bucket for all apps
 postgres_db_remote_backup_keep_daily: 7
 postgres_db_remote_backup_keep_weekly: 4
 postgres_db_remote_backup_keep_monthly: 12

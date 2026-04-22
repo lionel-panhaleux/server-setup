@@ -250,7 +250,7 @@ applog krcg --since '1h ago'         # any journalctl flags pass through
 It runs, in parallel:
 
 ```bash
-journalctl -f -t krcg                         # app service + nginx site + backup timer
+journalctl -f -t krcg                         # app service + nginx site + backup
 journalctl -f -u postgresql -g '@krcg'        # postgres engine lines for krcg's database
 ```
 

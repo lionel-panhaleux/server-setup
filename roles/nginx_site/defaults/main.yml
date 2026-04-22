@@ -8,11 +8,11 @@
 
 nginx_site_name: "{{ service_name | default('') }}"
 
-# For nginx_site_type: static | spa | proxy
+# For nginx_site_type: static | spa
 nginx_site_root: ""
 
 # For nginx_site_type: proxy  (WSGI/ASGI upstream, e.g. gunicorn/uvicorn)
-nginx_site_upstream: ""        # "http://127.0.0.1:8000" or "http://unix:/run/krcg.sock"
+nginx_site_upstream: ""  # "http://127.0.0.1:8000" or "http://unix:/run/krcg.sock"
 
 # Optional
 nginx_site_aliases: []                  # additional server_name entries
