@@ -15,20 +15,14 @@
   community.postgresql.postgresql_db:
     name: "{{ postgres_db_name }}"
     state: absent
-  become: true
-  become_user: postgres
 
 - name: Recreate empty database
   community.postgresql.postgresql_db:
     name: "{{ postgres_db_name }}"
     owner: "{{ postgres_db_user }}"
     state: present
-  become: true
-  become_user: postgres
 
 - name: Restore from dump
   ansible.builtin.command:
     cmd: "pg_restore --no-owner --role {{ postgres_db_user }} -d {{ postgres_db_name }} {{ postgres_db_backup_file }}"
-  become: true
-  become_user: postgres
   changed_when: true

@@ -1,0 +1,11 @@
+[Unit]
+Description=Scheduled pg_dump backup of every database in the cluster
+
+[Timer]
+OnCalendar={{ postgres_backup_schedule }}
+Persistent=true
+RandomizedDelaySec=30m
+Unit=postgres-backup.service
+
+[Install]
+WantedBy=timers.target

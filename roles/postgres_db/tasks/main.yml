@@ -7,26 +7,11 @@
       - postgres_db_password | length > 0
     fail_msg: "postgres_db_name, postgres_db_user and postgres_db_password are required"
 
-- name: Validate remote backup inputs
-  ansible.builtin.assert:
-    that:
-      - postgres_db_remote_backup_bucket | length > 0
-      - postgres_db_remote_backup_endpoint | length > 0
-    fail_msg: "postgres_db_remote_backup_bucket and postgres_db_remote_backup_endpoint are required when postgres_db_remote_backup_enabled is true"
-  when: postgres_db_remote_backup_enabled
-
-- name: Install psycopg2 (Ansible postgres module dep)
-  ansible.builtin.apt:
-    name: python3-psycopg2
-    state: present
-
 - name: Create database role
   community.postgresql.postgresql_user:
     name: "{{ postgres_db_user }}"
     password: "{{ postgres_db_password }}"
     state: present
-  become: true
-  become_user: postgres
   no_log: true
 
 - name: Create database owned by role
@@ -34,8 +19,6 @@
     name: "{{ postgres_db_name }}"
     owner: "{{ postgres_db_user }}"
     state: present
-  become: true
-  become_user: postgres
 
 - name: Apply per-database timeouts
   community.postgresql.postgresql_query:
@@ -46,37 +29,4 @@
     - { key: statement_timeout, value: "{{ postgres_db_statement_timeout }}" }
     - { key: idle_in_transaction_session_timeout, value: "{{ postgres_db_idle_in_transaction_session_timeout }}" }
     - { key: lock_timeout, value: "{{ postgres_db_lock_timeout }}" }
-  become: true
-  become_user: postgres
   changed_when: false
-
-- name: Ensure backup dir
-  ansible.builtin.file:
-    path: "{{ postgres_db_backup_dir }}"
-    state: directory
-    owner: postgres
-    group: postgres
-    mode: "0750"
-
-- name: Install backup service unit
-  ansible.builtin.template:
-    src: backup.service.j2
-    dest: "/etc/systemd/system/{{ postgres_db_backup_unit_name }}.service"
-    mode: "0644"
-  notify: Reload systemd
-
-- name: Install backup timer unit
-  ansible.builtin.template:
-    src: backup.timer.j2
-    dest: "/etc/systemd/system/{{ postgres_db_backup_unit_name }}.timer"
-    mode: "0644"
-  notify: Reload systemd
-
-- name: Reload systemd before enabling timer
-  ansible.builtin.meta: flush_handlers
-
-- name: Enable and start backup timer
-  ansible.builtin.systemd:
-    name: "{{ postgres_db_backup_unit_name }}.timer"
-    enabled: true
-    state: started

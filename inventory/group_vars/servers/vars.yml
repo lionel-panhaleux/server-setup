@@ -1,9 +1,19 @@
 ansible_user: deploy
 ansible_ssh_private_key_file: ~/.ssh/deploy
 
-# Host-level flag consumed by setup.yml only — when true, it writes
-# /etc/postgres-backup/remote.env from the vault_remote_backup_* secrets in
-# the sibling vault.yml (shared restic creds for any DB on this host).
-# Per-DB opt-in is a separate decision made in each consumer app's playbook
-# via postgres_db_remote_backup_enabled (they don't read this inventory).
+# Cluster-wide postgres backup (one systemd timer iterates every non-template
+# DB). setup.yml installs /usr/local/bin/pg-backup and postgres-backup.timer.
+postgres_backup_dir: /var/backups/postgres
+postgres_backup_retention_days: 7
+postgres_backup_schedule: "daily"   # systemd OnCalendar= expression
+
+# Remote upload via restic (one repo per DB at s3:<endpoint>/<bucket>/<db>).
+# When remote_backup_enabled, setup.yml writes /etc/postgres-backup/remote.env
+# from the vault_remote_backup_* secrets in the sibling vault.yml and renders
+# the bucket/endpoint into the service unit.
 remote_backup_enabled: true
+postgres_remote_backup_bucket: "krcg-db-backups"
+postgres_remote_backup_endpoint: "https://s3.fr-par.scw.cloud"
+postgres_remote_backup_keep_daily: 7
+postgres_remote_backup_keep_weekly: 4
+postgres_remote_backup_keep_monthly: 12

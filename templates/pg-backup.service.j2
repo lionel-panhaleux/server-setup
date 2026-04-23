@@ -1,0 +1,16 @@
+[Unit]
+Description=pg_dump backup of every database in the cluster
+After=postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=oneshot
+User=postgres
+Group=postgres
+SyslogIdentifier=postgres-backup
+Environment=BACKUP_DIR={{ postgres_backup_dir }}
+Environment=RETENTION_DAYS={{ postgres_backup_retention_days }}
+{% if remote_backup_enabled | default(false) %}
+EnvironmentFile=/etc/postgres-backup/remote.env
+{% endif %}
+ExecStart=/usr/local/bin/pg-backup
