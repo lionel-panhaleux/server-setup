@@ -27,6 +27,9 @@ jobs:
       - name: Install Ansible
         run: pip install ansible
 
+      - name: Install Ansible collections
+        run: ansible-galaxy collection install -r requirements.yml
+
       - name: Configure SSH
         run: |
           mkdir -p ~/.ssh
@@ -34,6 +37,11 @@ jobs:
           chmod 600 ~/.ssh/deploy
           yq '.host_key' inventory/host_vars/${{ inputs.host }}.yml >> ~/.ssh/known_hosts
 
+      - name: Write vault password
+        run: |
+          printf '%s' "${{ secrets.ANSIBLE_VAULT_PASSWORD }}" > /tmp/vault-pass
+          chmod 600 /tmp/vault-pass
+
       - name: Run upgrade playbook
         run: |
-          ansible-playbook upgrade.yml --limit "${{ inputs.host }}" -e confirm=${{ inputs.confirm }}
+          ansible-playbook upgrade.yml --limit "${{ inputs.host }}" -e confirm=${{ inputs.confirm }} --vault-password-file /tmp/vault-pass

@@ -3,265 +3,32 @@
 # Usage: ansible-playbook setup.yml --limit HOST --user deploy
 - name: System setup
   hosts: all
+  become: true
   tasks:
-    - name: Update apt cache and upgrade all packages
-      ansible.builtin.apt:
-        update_cache: true
-        upgrade: full
-        cache_valid_time: 3600
+    - name: Base system
+      ansible.builtin.import_tasks: tasks/base.yml
+      tags: [base]
 
-    - name: Install base packages
-      ansible.builtin.apt:
-        name:
-          - unattended-upgrades
-          - logrotate
-          - ufw
-          - nginx
-          - certbot
-          - python3-certbot-nginx
-          - python3-venv
-          - python3-dev
-          - python3-pip
-          - postgresql
-          - postgresql-client
-          - libpq-dev
-          - python3-psycopg2
-          - gcc
-          - make
-          - curl
-          - rsync
-          - git
-          - acl
-          - restic
-        state: present
+    - name: SSH hardening
+      ansible.builtin.import_tasks: tasks/ssh.yml
+      tags: [ssh]
 
-    - name: Enable automatic security updates
-      ansible.builtin.copy:
-        content: |
-          APT::Periodic::Update-Package-Lists "1";
-          APT::Periodic::Unattended-Upgrade "1";
-          APT::Periodic::AutocleanInterval "7";
-        dest: /etc/apt/apt.conf.d/20auto-upgrades
-        mode: "0644"
+    - name: Firewall
+      ansible.builtin.import_tasks: tasks/firewall.yml
+      tags: [firewall]
 
-    - name: Install uv
-      ansible.builtin.unarchive:
-        src: "https://github.com/astral-sh/uv/releases/latest/download/uv-{{ ansible_facts['architecture'] }}-unknown-linux-gnu.tar.gz"
-        dest: /usr/local/bin
-        remote_src: true
-        extra_opts:
-          - --strip-components=1
-        creates: /usr/local/bin/uv
+    - name: Host tuning
+      ansible.builtin.import_tasks: tasks/host_tuning.yml
+      tags: [tuning]
 
-    - name: Deploy hardened sshd config
-      ansible.builtin.template:
-        src: templates/sshd_config.j2
-        dest: /etc/ssh/sshd_config
-        mode: "0644"
-        validate: "sshd -t -f %s"
-      notify: Restart sshd
+    - name: Postgres cluster backup
+      ansible.builtin.import_tasks: tasks/postgres_cluster.yml
+      tags: [postgres]
 
-    - name: Allow SSH through UFW
-      community.general.ufw:
-        rule: allow
-        port: "22"
-        proto: tcp
-
-    - name: Allow HTTP through UFW
-      community.general.ufw:
-        rule: allow
-        port: "80"
-        proto: tcp
-
-    - name: Allow HTTPS through UFW
-      community.general.ufw:
-        rule: allow
-        port: "443"
-        proto: tcp
-
-    - name: Enable UFW with deny-by-default policy
-      community.general.ufw:
-        state: enabled
-        policy: deny
-        direction: incoming
-
-    - name: Remove default nginx site
-      ansible.builtin.file:
-        path: /etc/nginx/sites-enabled/default
-        state: absent
-      notify: Reload nginx
-
-    - name: Ensure nginx is enabled and running
-      ansible.builtin.service:
-        name: nginx
-        state: started
-        enabled: true
-
-    - name: Ensure certbot timer is enabled
-      ansible.builtin.systemd:
-        name: certbot.timer
-        state: started
-        enabled: true
-
-    - name: Ensure logrotate timer is enabled
-      ansible.builtin.systemd:
-        name: logrotate.timer
-        state: started
-        enabled: true
-
-    - name: Ensure tmp files cleanup timer is enabled
-      ansible.builtin.systemd:
-        name: systemd-tmpfiles-clean.timer
-        state: started
-        enabled: true
-
-    - name: Locate postgres conf.d directories
-      ansible.builtin.find:
-        paths: /etc/postgresql
-        patterns: conf.d
-        recurse: true
-        file_type: directory
-      register: pg_confd_dirs
-
-    - name: Configure postgres log_line_prefix to include database name
-      ansible.builtin.copy:
-        dest: "{{ item.path }}/50-log-prefix.conf"
-        content: |
-          # Managed by server-setup.
-          # %d puts the database name in every session log line so
-          # `journalctl -u postgresql -g "@<db>"` scopes engine logs to that DB.
-          log_line_prefix = '[%p] %q@%d '
-        mode: "0644"
-      loop: "{{ pg_confd_dirs.files }}"
-      loop_control:
-        label: "{{ item.path }}"
-      notify: Restart postgresql
-
-    - name: Install applog helper script
-      ansible.builtin.copy:
-        src: files/applog.sh
-        dest: /usr/local/bin/applog
-        mode: "0755"
-
-    - name: Assert remote backup secrets are present
-      ansible.builtin.assert:
-        that:
-          - vault_remote_backup_access_key | default('') | length > 0
-          - vault_remote_backup_secret_key | default('') | length > 0
-          - vault_remote_backup_restic_password | default('') | length > 0
-          - postgres_remote_backup_bucket | length > 0
-        fail_msg: >-
-          remote_backup_enabled=true requires vault_remote_backup_access_key,
-          vault_remote_backup_secret_key, vault_remote_backup_restic_password
-          (vault-encrypted), and postgres_remote_backup_bucket in inventory
-      when: remote_backup_enabled | default(false)
-
-    - name: Ensure remote backup config dir exists
-      ansible.builtin.file:
-        path: /etc/postgres-backup
-        state: directory
-        owner: root
-        group: postgres
-        mode: "0750"
-      when: remote_backup_enabled | default(false)
-
-    - name: Write remote backup credentials
-      ansible.builtin.copy:
-        content: |
-          AWS_ACCESS_KEY_ID={{ vault_remote_backup_access_key }}
-          AWS_SECRET_ACCESS_KEY={{ vault_remote_backup_secret_key }}
-          RESTIC_PASSWORD={{ vault_remote_backup_restic_password }}
-          RESTIC_REPOSITORY_BASE=s3:{{ postgres_remote_backup_endpoint }}/{{ postgres_remote_backup_bucket }}
-          REMOTE_KEEP_DAILY={{ postgres_remote_backup_keep_daily }}
-          REMOTE_KEEP_WEEKLY={{ postgres_remote_backup_keep_weekly }}
-          REMOTE_KEEP_MONTHLY={{ postgres_remote_backup_keep_monthly }}
-        dest: /etc/postgres-backup/remote.env
-        owner: root
-        group: postgres
-        mode: "0640"
-      when: remote_backup_enabled | default(false)
-      no_log: true
-
-    - name: Ensure postgres backup dir
-      ansible.builtin.file:
-        path: "{{ postgres_backup_dir }}"
-        state: directory
-        owner: postgres
-        group: postgres
-        mode: "0750"
-
-    - name: Install pg-backup script
-      ansible.builtin.copy:
-        src: files/pg-backup.sh
-        dest: /usr/local/bin/pg-backup
-        owner: root
-        group: postgres
-        mode: "0750"
-
-    - name: Install pg-backup service unit
-      ansible.builtin.template:
-        src: templates/pg-backup.service.j2
-        dest: /etc/systemd/system/postgres-backup.service
-        mode: "0644"
-      notify: Reload systemd
-
-    - name: Install pg-backup timer unit
-      ansible.builtin.template:
-        src: templates/pg-backup.timer.j2
-        dest: /etc/systemd/system/postgres-backup.timer
-        mode: "0644"
-      notify: Reload systemd
-
-    - name: Reload systemd before enabling backup timer
-      ansible.builtin.meta: flush_handlers
-
-    - name: Enable and start pg-backup timer
-      ansible.builtin.systemd:
-        name: postgres-backup.timer
-        enabled: true
-        state: started
-
-    - name: Read SSH host ed25519 public key
-      ansible.builtin.slurp:
-        src: /etc/ssh/ssh_host_ed25519_key.pub
-      register: ssh_host_pubkey
-
-    - name: Write host key to inventory
-      ansible.builtin.copy:
-        content: |
-          host_key: "{{ ansible_host }} {{ ssh_host_pubkey.content | b64decode | trim }}"
-        dest: "{{ playbook_dir }}/inventory/host_vars/{{ inventory_hostname }}.yml"
-        mode: "0644"
-      delegate_to: localhost
-      become: false
-
-    - name: Check if reboot is required
-      ansible.builtin.stat:
-        path: /var/run/reboot-required
-      register: reboot_required
-
-    - name: Warn if reboot is required
-      ansible.builtin.debug:
-        msg: "REBOOT REQUIRED: A kernel or system update needs a reboot to take effect."
-      when: reboot_required.stat.exists
-      changed_when: true
+    - name: Inventory feedback
+      ansible.builtin.import_tasks: tasks/inventory_feedback.yml
+      tags: [feedback]
 
   handlers:
-    - name: Restart sshd
-      ansible.builtin.service:
-        name: sshd
-        state: restarted
-
-    - name: Reload nginx
-      ansible.builtin.service:
-        name: nginx
-        state: reloaded
-
-    - name: Restart postgresql
-      ansible.builtin.service:
-        name: postgresql
-        state: restarted
-
-    - name: Reload systemd
-      ansible.builtin.systemd:
-        daemon_reload: true
+    - name: Include shared handlers
+      ansible.builtin.import_tasks: handlers/main.yml

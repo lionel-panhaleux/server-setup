@@ -1,0 +1,29 @@
+---
+# Read the server's SSH host ed25519 public key and write it back to
+# inventory/host_vars/<host>.yml so CI can populate known_hosts from it.
+# Also reports if a reboot is required.
+
+- name: Read SSH host ed25519 public key
+  ansible.builtin.slurp:
+    src: /etc/ssh/ssh_host_ed25519_key.pub
+  register: ssh_host_pubkey
+
+- name: Write host key to inventory
+  ansible.builtin.copy:
+    content: |
+      host_key: "{{ ansible_host }} {{ ssh_host_pubkey.content | b64decode | trim }}"
+    dest: "{{ playbook_dir }}/inventory/host_vars/{{ inventory_hostname }}.yml"
+    mode: "0644"
+  delegate_to: localhost
+  become: false
+
+- name: Check if reboot is required
+  ansible.builtin.stat:
+    path: /var/run/reboot-required
+  register: reboot_required
+
+- name: Warn if reboot is required
+  ansible.builtin.debug:
+    msg: "REBOOT REQUIRED: A kernel or system update needs a reboot to take effect."
+  when: reboot_required.stat.exists
+  changed_when: true

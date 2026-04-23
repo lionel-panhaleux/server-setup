@@ -1,0 +1,11 @@
+[Unit]
+Description=Scheduled restic check of postgres backup repositories
+
+[Timer]
+OnCalendar=weekly
+Persistent=true
+RandomizedDelaySec=2h
+Unit=postgres-backup-check.service
+
+[Install]
+WantedBy=timers.target

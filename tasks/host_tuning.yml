@@ -1,0 +1,44 @@
+---
+# Host-level tuning: time sync + swap. No kernel sysctl — hosts are
+# shared-purpose, not dedicated DB servers.
+
+- name: Ensure systemd-timesyncd is enabled and running
+  ansible.builtin.service:
+    name: systemd-timesyncd
+    state: started
+    enabled: true
+
+- name: Check if /swapfile exists
+  ansible.builtin.stat:
+    path: /swapfile
+  register: swapfile_stat
+
+- name: Provision 2GB swapfile
+  when: not swapfile_stat.stat.exists
+  block:
+    - name: Allocate swapfile (dd — works on all filesystems)
+      ansible.builtin.command:
+        cmd: dd if=/dev/zero of=/swapfile bs=1M count=2048
+        creates: /swapfile
+    - name: Set swapfile mode
+      ansible.builtin.file:
+        path: /swapfile
+        owner: root
+        group: root
+        mode: "0600"
+    - name: Format swapfile
+      ansible.builtin.command:
+        cmd: mkswap /swapfile
+      changed_when: true
+    - name: Activate swapfile
+      ansible.builtin.command:
+        cmd: swapon /swapfile
+      changed_when: true
+
+- name: Persist swapfile in fstab
+  ansible.posix.mount:
+    name: none
+    src: /swapfile
+    fstype: swap
+    opts: sw
+    state: present

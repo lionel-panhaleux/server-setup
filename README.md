@@ -8,6 +8,8 @@ Ansible playbooks for Debian/Ubuntu server provisioning. Installs base packages,
 - [uv](https://docs.astral.sh/uv/) installed locally, then run `uv sync` to install Ansible and dev tools
 - [just](https://just.systems/) for running sync recipes
 - [gh](https://cli.github.com/) CLI, authenticated, for pushing variables/secrets to GitHub
+- Ansible collections: `ansible-galaxy collection install -r requirements.yml`
+- (optional but recommended) [pre-commit](https://pre-commit.com/) hooks: `pre-commit install` once per clone
 
 ## Inventory
 
@@ -82,10 +84,10 @@ ansible HOST -m reboot -b
 
 ## Deploy targets
 
-`deploy-targets.conf` maps GitHub repos to inventory hostnames:
+`deploy-targets.yml` maps GitHub repos to inventory hostnames:
 
-```
-lionel-panhaleux/krcg-api=api
+```yaml
+lionel-panhaleux/krcg-api: api
 ```
 
 ### Sync variables to GitHub

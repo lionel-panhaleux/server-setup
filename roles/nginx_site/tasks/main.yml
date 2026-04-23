@@ -17,17 +17,6 @@
     group: www-data
     mode: "0755"
 
-- name: Install websocket upgrade map (shared)
-  ansible.builtin.copy:
-    dest: /etc/nginx/conf.d/upgrade_map.conf
-    content: |
-      map $http_upgrade $connection_upgrade {
-          default upgrade;
-          ''      close;
-      }
-    mode: "0644"
-  notify: Reload nginx
-
 - name: Check for existing TLS certificate
   ansible.builtin.stat:
     path: "/etc/letsencrypt/live/{{ nginx_site_domain }}/fullchain.pem"

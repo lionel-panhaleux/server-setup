@@ -1,0 +1,12 @@
+---
+profile: production
+offline: true
+
+exclude_paths:
+  - .git
+  - .venv
+  - .ansible
+  - "**/vault.yml"
+
+skip_list:
+  - truthy

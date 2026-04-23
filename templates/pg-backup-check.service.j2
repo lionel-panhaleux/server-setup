@@ -1,0 +1,15 @@
+[Unit]
+Description=Weekly restic check of postgres backup repositories
+After=network-online.target postgresql.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+Type=oneshot
+User=postgres
+Group=postgres
+SyslogIdentifier=postgres-backup-check
+{% if remote_backup_enabled | default(false) %}
+EnvironmentFile=/etc/postgres-backup/remote.env
+{% endif %}
+ExecStart=/usr/local/bin/pg-backup-check

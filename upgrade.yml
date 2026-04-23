@@ -4,6 +4,7 @@
 # Execute:          ansible-playbook upgrade.yml --limit HOST --user deploy -e confirm=true
 - name: Distribution upgrade
   hosts: all
+  become: true
   vars:
     confirm: false
   tasks:

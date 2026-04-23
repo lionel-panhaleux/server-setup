@@ -32,6 +32,9 @@ backup_db() {
 
     notify "$db" "pg_dump -> $dump"
     if ! /usr/bin/pg_dump -F c -f "$dump" "$db"; then
+        # Drop the partial file so restic doesn't upload garbage
+        # and it doesn't sit around for $RETENTION_DAYS.
+        rm -f "$dump"
         notify "$db" "pg_dump FAILED"
         return 1
     fi

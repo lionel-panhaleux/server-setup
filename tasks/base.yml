@@ -1,0 +1,125 @@
+---
+# Base system setup: packages, automatic security updates, uv, fail2ban,
+# nginx defaults, systemd timers, journald, applog helper.
+
+- name: Update apt cache and upgrade all packages
+  ansible.builtin.apt:
+    update_cache: true
+    upgrade: full
+    cache_valid_time: 3600
+
+- name: Install base packages
+  ansible.builtin.apt:
+    name:
+      - unattended-upgrades
+      - logrotate
+      - ufw
+      - fail2ban
+      - nginx
+      - certbot
+      - python3-certbot-nginx
+      - python3-venv
+      - python3-dev
+      - python3-pip
+      - postgresql
+      - postgresql-client
+      - libpq-dev
+      - python3-psycopg2
+      - gcc
+      - make
+      - curl
+      - rsync
+      - git
+      - acl
+      - restic
+    state: present
+
+- name: Enable automatic security updates
+  ansible.builtin.copy:
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+      APT::Periodic::AutocleanInterval "7";
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    mode: "0644"
+
+- name: Install uv
+  ansible.builtin.unarchive:
+    src: "https://github.com/astral-sh/uv/releases/latest/download/uv-{{ ansible_facts['architecture'] }}-unknown-linux-gnu.tar.gz"
+    dest: /usr/local/bin
+    remote_src: true
+    extra_opts:
+      - --strip-components=1
+    creates: /usr/local/bin/uv
+
+- name: Deploy fail2ban jail config
+  ansible.builtin.copy:
+    src: files/jail.local
+    dest: /etc/fail2ban/jail.local
+    mode: "0644"
+  notify: Restart fail2ban
+
+- name: Ensure fail2ban is enabled and running
+  ansible.builtin.service:
+    name: fail2ban
+    state: started
+    enabled: true
+
+- name: Remove default nginx site
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: Reload nginx
+
+- name: Ensure nginx is enabled and running
+  ansible.builtin.service:
+    name: nginx
+    state: started
+    enabled: true
+
+- name: Install nginx websocket upgrade map (shared across sites)
+  ansible.builtin.copy:
+    dest: /etc/nginx/conf.d/upgrade_map.conf
+    content: |
+      map $http_upgrade $connection_upgrade {
+          default upgrade;
+          ''      close;
+      }
+    mode: "0644"
+  notify: Reload nginx
+
+- name: Ensure certbot timer is enabled
+  ansible.builtin.systemd:
+    name: certbot.timer
+    state: started
+    enabled: true
+
+- name: Ensure logrotate timer is enabled
+  ansible.builtin.systemd:
+    name: logrotate.timer
+    state: started
+    enabled: true
+
+- name: Ensure tmp files cleanup timer is enabled
+  ansible.builtin.systemd:
+    name: systemd-tmpfiles-clean.timer
+    state: started
+    enabled: true
+
+- name: Configure journald persistence and size caps
+  ansible.builtin.copy:
+    dest: /etc/systemd/journald.conf.d/00-server-setup.conf
+    content: |
+      # Managed by server-setup.
+      [Journal]
+      Storage=persistent
+      SystemMaxUse=2G
+      SystemKeepFree=500M
+    mode: "0644"
+  notify: Restart systemd-journald
+
+- name: Install applog helper script
+  ansible.builtin.copy:
+    src: files/applog.sh
+    dest: /usr/local/bin/applog
+    mode: "0755"

@@ -1,0 +1,31 @@
+---
+# Shared handlers for setup.yml task files.
+
+- name: Restart sshd
+  ansible.builtin.service:
+    name: sshd
+    state: restarted
+
+- name: Reload nginx
+  ansible.builtin.service:
+    name: nginx
+    state: reloaded
+
+- name: Restart postgresql
+  ansible.builtin.service:
+    name: postgresql
+    state: restarted
+
+- name: Restart fail2ban
+  ansible.builtin.service:
+    name: fail2ban
+    state: restarted
+
+- name: Restart systemd-journald
+  ansible.builtin.service:
+    name: systemd-journald
+    state: restarted
+
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
