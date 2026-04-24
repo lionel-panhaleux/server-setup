@@ -16,6 +16,10 @@ on:
         type: boolean
         default: false
 
+concurrency:
+  group: ${{ inputs.host }}
+  cancel-in-progress: false
+
 jobs:
   upgrade:
     name: Run distribution upgrade

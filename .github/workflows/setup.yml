@@ -12,6 +12,10 @@ on:
           - strasbourg
           - frankfurt
 
+concurrency:
+  group: ${{ inputs.host }}
+  cancel-in-progress: false
+
 jobs:
   setup:
     name: Run system setup
