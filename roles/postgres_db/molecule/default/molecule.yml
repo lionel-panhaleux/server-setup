@@ -1,0 +1,31 @@
+---
+driver:
+  name: docker
+
+platforms:
+  - name: pg-test
+    image: debian:trixie
+    dockerfile: Dockerfile
+    pre_build_image: false
+    privileged: true
+    command: /sbin/init
+    cgroupns_mode: host
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+    tmpfs:
+      - /run
+      - /tmp
+
+provisioner:
+  name: ansible
+  env:
+    # Resolve the role by its directory name (postgres_db), not molecule's
+    # auto-generated "<author>.postgres_db" symlink.
+    ANSIBLE_ROLES_PATH: "${MOLECULE_PROJECT_DIRECTORY}/../"
+  inventory:
+    host_vars:
+      pg-test:
+        ansible_python_interpreter: /usr/bin/python3
+
+verifier:
+  name: ansible

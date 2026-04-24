@@ -1,0 +1,28 @@
+---
+- name: Verify nginx_site
+  hosts: all
+  gather_facts: false
+  become: true
+  tasks:
+    - name: nginx config must parse cleanly
+      ansible.builtin.command:
+        cmd: nginx -t
+      changed_when: false
+
+    - name: Each site is enabled
+      ansible.builtin.stat:
+        path: "/etc/nginx/sites-enabled/{{ item }}.conf"
+      register: site_stat
+      loop:
+        - mol_static
+        - mol_spa
+        - mol_proxy
+
+    - name: Symlinks resolve to sites-available
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+          - item.stat.islnk
+      loop: "{{ site_stat.results }}"
+      loop_control:
+        label: "{{ item.item }}"

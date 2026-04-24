@@ -1,0 +1,21 @@
+---
+- name: Prepare postgres test host
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: Refresh apt cache
+      ansible.builtin.apt:
+        update_cache: true
+
+    - name: Install postgresql + python bindings
+      ansible.builtin.apt:
+        name:
+          - postgresql
+          - python3-psycopg2
+        state: present
+
+    - name: Start postgresql
+      ansible.builtin.service:
+        name: postgresql
+        state: started
+        enabled: true

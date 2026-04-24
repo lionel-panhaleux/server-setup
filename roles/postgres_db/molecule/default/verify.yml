@@ -1,0 +1,51 @@
+---
+- name: Verify postgres_db
+  hosts: all
+  gather_facts: false
+  become: true
+  become_user: postgres
+  vars:
+    postgres_db_name: molecule_test_db
+    postgres_db_user: molecule_test_user
+  tasks:
+    - name: Confirm database exists
+      community.postgresql.postgresql_query:
+        db: postgres
+        query: "SELECT 1 FROM pg_database WHERE datname = %s"
+        positional_args:
+          - "{{ postgres_db_name }}"
+      register: db_check
+
+    - name: Assert database was created
+      ansible.builtin.assert:
+        that: db_check.rowcount | int == 1
+
+    - name: Confirm role exists
+      community.postgresql.postgresql_query:
+        db: postgres
+        query: "SELECT 1 FROM pg_roles WHERE rolname = %s"
+        positional_args:
+          - "{{ postgres_db_user }}"
+      register: role_check
+
+    - name: Assert role was created
+      ansible.builtin.assert:
+        that: role_check.rowcount | int == 1
+
+    - name: Fetch DB-level settings applied by the role
+      community.postgresql.postgresql_query:
+        db: postgres
+        query: >
+          SELECT unnest(setconfig) AS setting
+          FROM pg_db_role_setting s
+          JOIN pg_database d ON s.setdatabase = d.oid
+          WHERE d.datname = %s AND s.setrole = 0
+        positional_args:
+          - "{{ postgres_db_name }}"
+      register: db_settings
+
+    - name: Assert statement_timeout + lock_timeout were applied
+      ansible.builtin.assert:
+        that:
+          - "'statement_timeout=15s' in (db_settings.query_result | map(attribute='setting') | list)"
+          - "'lock_timeout=5s' in (db_settings.query_result | map(attribute='setting') | list)"

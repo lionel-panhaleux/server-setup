@@ -6,6 +6,7 @@ ignore: |
   .git/
   .ansible/
   uv.lock
+  **/molecule/
 
 rules:
   line-length:

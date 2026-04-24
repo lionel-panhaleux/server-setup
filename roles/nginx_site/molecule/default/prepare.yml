@@ -1,0 +1,66 @@
+---
+- name: Prepare nginx test host
+  hosts: all
+  gather_facts: true
+  vars:
+    _test_domains:
+      - static.molecule.test
+      - spa.molecule.test
+      - proxy.molecule.test
+  tasks:
+    - name: Refresh apt cache
+      ansible.builtin.apt:
+        update_cache: true
+
+    - name: Install nginx + openssl
+      ansible.builtin.apt:
+        name:
+          - nginx
+          - openssl
+        state: present
+
+    - name: Create LE directory per test domain
+      ansible.builtin.file:
+        path: "/etc/letsencrypt/live/{{ item }}"
+        state: directory
+        mode: "0755"
+      loop: "{{ _test_domains }}"
+
+    # Pre-populating the cert at the expected path makes the role's certbot
+    # task a no-op via its `creates:` guard, so no live LE call is attempted.
+    - name: Generate self-signed cert per test domain
+      ansible.builtin.command:
+        cmd: >-
+          openssl req -x509 -nodes -newkey rsa:2048 -days 3650
+          -keyout /etc/letsencrypt/live/{{ item }}/privkey.pem
+          -out /etc/letsencrypt/live/{{ item }}/fullchain.pem
+          -subj "/CN={{ item }}"
+        creates: "/etc/letsencrypt/live/{{ item }}/fullchain.pem"
+      loop: "{{ _test_domains }}"
+
+    - name: Stub options-ssl-nginx.conf (empty is fine; nginx accepts empty include)
+      ansible.builtin.copy:
+        content: ""
+        dest: /etc/letsencrypt/options-ssl-nginx.conf
+        mode: "0644"
+
+    - name: Generate ssl-dhparams.pem (dsaparam mode — fast enough for tests)
+      ansible.builtin.command:
+        cmd: openssl dhparam -out /etc/letsencrypt/ssl-dhparams.pem -dsaparam 2048
+        creates: /etc/letsencrypt/ssl-dhparams.pem
+
+    # Normally installed by server-setup's tasks/base.yml; the role assumes it exists.
+    - name: Install websocket upgrade map (required by proxy-type sites)
+      ansible.builtin.copy:
+        dest: /etc/nginx/conf.d/upgrade_map.conf
+        content: |
+          map $http_upgrade $connection_upgrade {
+              default upgrade;
+              ''      close;
+          }
+        mode: "0644"
+
+    - name: Start nginx
+      ansible.builtin.service:
+        name: nginx
+        state: started

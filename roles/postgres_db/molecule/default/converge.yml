@@ -1,0 +1,12 @@
+---
+- name: Converge postgres_db
+  hosts: all
+  gather_facts: false
+  become: true
+  become_user: postgres
+  vars:
+    postgres_db_name: molecule_test_db
+    postgres_db_user: molecule_test_user
+    postgres_db_password: molecule-test
+  roles:
+    - role: postgres_db

@@ -1,0 +1,31 @@
+---
+driver:
+  name: docker
+
+platforms:
+  - name: nginx-test
+    image: debian:trixie
+    dockerfile: Dockerfile
+    pre_build_image: false
+    privileged: true
+    command: /sbin/init
+    cgroupns_mode: host
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+    tmpfs:
+      - /run
+      - /tmp
+
+provisioner:
+  name: ansible
+  env:
+    # Resolve the role by its directory name (nginx_site), not molecule's
+    # auto-generated "<author>.nginx_site" symlink.
+    ANSIBLE_ROLES_PATH: "${MOLECULE_PROJECT_DIRECTORY}/../"
+  inventory:
+    host_vars:
+      nginx-test:
+        ansible_python_interpreter: /usr/bin/python3
+
+verifier:
+  name: ansible

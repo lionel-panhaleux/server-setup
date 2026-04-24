@@ -1,0 +1,44 @@
+---
+- name: Converge nginx_site
+  hosts: all
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Prepare webroot for static/spa sites
+      ansible.builtin.file:
+        path: /srv/site-root
+        state: directory
+        mode: "0755"
+
+    - name: Write placeholder index
+      ansible.builtin.copy:
+        content: "<html>ok</html>"
+        dest: /srv/site-root/index.html
+        mode: "0644"
+
+    - name: Deploy a static site
+      ansible.builtin.include_role:
+        name: nginx_site
+      vars:
+        nginx_site_name: mol_static
+        nginx_site_domain: static.molecule.test
+        nginx_site_type: static
+        nginx_site_root: /srv/site-root
+
+    - name: Deploy an SPA site
+      ansible.builtin.include_role:
+        name: nginx_site
+      vars:
+        nginx_site_name: mol_spa
+        nginx_site_domain: spa.molecule.test
+        nginx_site_type: spa
+        nginx_site_root: /srv/site-root
+
+    - name: Deploy a proxy site
+      ansible.builtin.include_role:
+        name: nginx_site
+      vars:
+        nginx_site_name: mol_proxy
+        nginx_site_domain: proxy.molecule.test
+        nginx_site_type: proxy
+        nginx_site_upstream: "http://127.0.0.1:8000"

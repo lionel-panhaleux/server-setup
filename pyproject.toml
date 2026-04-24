@@ -5,4 +5,8 @@ requires-python = ">=3.13"
 dependencies = ["ansible>=13"]
 
 [dependency-groups]
-dev = ["ansible-lint>=26.2.0"]
+dev = [
+    "ansible-lint>=26.2.0",
+    "molecule>=25",
+    "molecule-plugins[docker]>=23",
+]

@@ -9,6 +9,15 @@
       - (nginx_site_type == "proxy") or (nginx_site_root | length > 0)
     fail_msg: "nginx_site_name, nginx_site_domain, nginx_site_type and its companion (nginx_site_root or nginx_site_upstream) are required"
 
+# nginx_site_name becomes a syslog tag (templates/site.conf.j2) — nginx rejects
+# anything other than alphanumeric + underscore with a cryptic parse error.
+- name: Validate nginx_site_name charset
+  ansible.builtin.assert:
+    that: nginx_site_name is match('^[A-Za-z0-9_]+$')
+    fail_msg: >-
+      nginx_site_name must contain only alphanumeric and underscore
+      (it becomes an nginx syslog tag). Got: "{{ nginx_site_name }}"
+
 - name: Ensure certbot webroot
   ansible.builtin.file:
     path: /var/www/certbot
