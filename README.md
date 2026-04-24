@@ -265,6 +265,8 @@ In Grafana Cloud → Explore, metrics should appear within ~60s (`up{host="stras
 - `GRAFANA_OTLP_ENDPOINT` ← `OTEL_EXPORTER_OTLP_ENDPOINT` (e.g. `https://otlp-gateway-prod-XX-X.grafana.net/otlp`)
 - `GRAFANA_OTLP_HEADERS` ← `OTEL_EXPORTER_OTLP_HEADERS` (already base64-encoded as `Authorization=Basic …`)
 
+The reporter uses the third-party action [`corentinmusard/otel-cicd-action`](https://github.com/corentinmusard/otel-cicd-action) (MIT, source audited, pinned by commit SHA in the workflow). It's not a verified publisher, so if your account/org enforces **Allow specified actions and reusable workflows**, allowlist `corentinmusard/otel-cicd-action@*` under **Settings → Actions → General** (at user level to cover all repos).
+
 Grafana Cloud's Tempo metrics generator turns the spans into `traces_spanmetrics_calls_total`, so alerting is a standard PromQL rule:
 
 ```promql

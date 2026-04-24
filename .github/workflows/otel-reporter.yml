@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Export traces to Grafana Cloud
-        uses: corentinmusard/otel-cicd-action@v1
+        uses: corentinmusard/otel-cicd-action@f2d88ecf54d9dd3e01ea95e25f93603212ee93d3 # v4.0.1
         with:
           otlpEndpoint: ${{ secrets.GRAFANA_OTLP_ENDPOINT }}
           otlpHeaders: ${{ secrets.GRAFANA_OTLP_HEADERS }}
