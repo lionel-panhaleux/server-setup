@@ -1,5 +1,7 @@
 # server-setup
 
+[![Lint](https://github.com/lionel-panhaleux/server-setup/actions/workflows/lint.yml/badge.svg?branch=main)](https://github.com/lionel-panhaleux/server-setup/actions/workflows/lint.yml)
+
 Ansible playbooks for Debian/Ubuntu server provisioning. Installs base packages, hardens SSH, configures UFW firewall, and sets up nginx + certbot.
 
 ## Prerequisites
