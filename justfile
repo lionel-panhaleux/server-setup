@@ -22,3 +22,16 @@ sync-key key_file:
         echo "→ $repo: DEPLOY_SSH_KEY"
         gh secret set DEPLOY_SSH_KEY --repo "$repo" --env production < "{{ key_file }}"
     done
+
+# Run molecule tests locally (requires docker daemon + `uv sync --group dev`)
+test role="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export PATH="{{ justfile_directory() }}/.venv/bin:$PATH"
+    ansible-galaxy collection install community.docker >/dev/null
+    roles="{{ role }}"
+    [ -z "$roles" ] && roles="nginx_site postgres_db"
+    for r in $roles; do
+        echo "==> molecule test: $r"
+        (cd "{{ justfile_directory() }}/roles/$r" && molecule test)
+    done
