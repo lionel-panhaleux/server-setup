@@ -262,7 +262,7 @@ In Grafana Cloud → Explore, metrics should appear within ~60s (`up{host="stras
 
 **One-time setup.** In the Grafana Cloud portal, open your stack → click **Configure** on the OpenTelemetry tile → **Generate now**. It hands you three env vars; copy two of them into repo-level GitHub secrets verbatim:
 
-- `GRAFANA_OTLP_ENDPOINT` ← `OTEL_EXPORTER_OTLP_ENDPOINT` (e.g. `https://otlp-gateway-prod-XX-X.grafana.net/otlp`)
+- `GRAFANA_OTLP_ENDPOINT` ← `OTEL_EXPORTER_OTLP_ENDPOINT` (e.g. `https://otlp-gateway-prod-XX-X.grafana.net/otlp` — the workflow appends `/v1/traces` itself)
 - `GRAFANA_OTLP_HEADERS` ← `OTEL_EXPORTER_OTLP_HEADERS` (already base64-encoded as `Authorization=Basic …`)
 
 The reporter uses the third-party action [`corentinmusard/otel-cicd-action`](https://github.com/corentinmusard/otel-cicd-action) (MIT, source audited, pinned by commit SHA in the workflow). It's not a verified publisher, so if your account/org enforces **Allow specified actions and reusable workflows**, allowlist `corentinmusard/otel-cicd-action@*` under **Settings → Actions → General** (at user level to cover all repos).
