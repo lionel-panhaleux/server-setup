@@ -12,7 +12,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Install Ansible + linters
+        run: pip install ansible ansible-lint yamllint
+
+      - name: Install Ansible collections
+        run: ansible-galaxy collection install -r requirements.yml
+
       - name: Run ansible-lint
-        uses: ansible/ansible-lint@main
-        with:
-          requirements_file: requirements.yml
+        run: ansible-lint
+
+      - name: Run yamllint
+        run: yamllint .
