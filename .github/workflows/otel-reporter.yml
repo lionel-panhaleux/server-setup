@@ -1,0 +1,23 @@
+name: CI Telemetry
+
+on:
+  workflow_run:
+    workflows: [Lint, Molecule, Server Setup, Distribution Upgrade]
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Export traces to Grafana Cloud
+        uses: corentinmusard/otel-cicd-action@v1
+        with:
+          otlpEndpoint: ${{ secrets.GRAFANA_OTLP_ENDPOINT }}
+          otlpHeaders: ${{ secrets.GRAFANA_OTLP_HEADERS }}
+          otelServiceName: server-setup-ci
+          runId: ${{ github.event.workflow_run.id }}
+          githubToken: ${{ secrets.GITHUB_TOKEN }}

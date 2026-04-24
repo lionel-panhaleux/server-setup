@@ -137,7 +137,7 @@ Consumer playbook (proxy example):
 - hosts: all
   become: true
   vars:
-    service_name: krcg-api       # flows to both nginx_site_name and postgres_db_name
+    service_name: krcg_api       # flows to both nginx_site_name and postgres_db_name (alphanumeric + underscore only — becomes an nginx syslog tag)
   roles:
     - role: server-setup/nginx_site
       vars:
@@ -255,6 +255,25 @@ In Grafana Cloud → Explore, metrics should appear within ~60s (`up{host="stras
 - `node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes < 0.15` — disk < 15% → P2
 - `up{job="integrations/unix"} == 0` — host not scraping for >5m → P1
 - `pg_up == 0` or `nginx_up == 0` (via postgres exporter / node exporter systemd unit) — service down → P1
+
+#### CI telemetry (GitHub Actions → Grafana Cloud)
+
+`.github/workflows/otel-reporter.yml` pushes one trace per CI workflow run straight from GitHub's runners to Grafana Cloud's OTLP gateway — no scraper, nothing lands on your VPSes. It's triggered by `workflow_run: completed` so every run emits a span regardless of how it ended (success, failure, cancellation).
+
+**One-time setup.** In the Grafana Cloud portal, open your stack → click **Configure** on the OpenTelemetry tile → **Generate now**. It hands you three env vars; copy two of them into repo-level GitHub secrets verbatim:
+
+- `GRAFANA_OTLP_ENDPOINT` ← `OTEL_EXPORTER_OTLP_ENDPOINT` (e.g. `https://otlp-gateway-prod-XX-X.grafana.net/otlp`)
+- `GRAFANA_OTLP_HEADERS` ← `OTEL_EXPORTER_OTLP_HEADERS` (already base64-encoded as `Authorization=Basic …`)
+
+Grafana Cloud's Tempo metrics generator turns the spans into `traces_spanmetrics_calls_total`, so alerting is a standard PromQL rule:
+
+```promql
+sum by (service_name, span_name) (
+  increase(traces_spanmetrics_calls_total{service_name="server-setup-ci", status_code="STATUS_CODE_ERROR"}[15m])
+) > 0
+```
+
+The same workflow file drops into app repos (krcg-api, codex, etc.) — only the `workflows:` list and `otelServiceName:` need updating per repo.
 
 ### `postgres_db`
 
