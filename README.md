@@ -1,7 +1,6 @@
 # server-setup
 
-[![Lint](https://github.com/lionel-panhaleux/server-setup/actions/workflows/lint.yml/badge.svg?branch=main)](https://github.com/lionel-panhaleux/server-setup/actions/workflows/lint.yml)
-[![Molecule](https://github.com/lionel-panhaleux/server-setup/actions/workflows/molecule.yml/badge.svg?branch=main)](https://github.com/lionel-panhaleux/server-setup/actions/workflows/molecule.yml)
+[![Test](https://github.com/lionel-panhaleux/server-setup/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/lionel-panhaleux/server-setup/actions/workflows/test.yml)
 
 Ansible playbooks for Debian/Ubuntu server provisioning. Installs base packages, hardens SSH, configures UFW firewall, and sets up nginx + certbot.
 

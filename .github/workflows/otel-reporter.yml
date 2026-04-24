@@ -2,7 +2,7 @@ name: CI Telemetry
 
 on:
   workflow_run:
-    workflows: [Lint, Molecule, Server Setup, Distribution Upgrade]
+    workflows: [Test, Server Setup, Distribution Upgrade]
     types: [completed]
 
 permissions:
