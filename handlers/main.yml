@@ -29,3 +29,8 @@
 - name: Reload systemd
   ansible.builtin.systemd:
     daemon_reload: true
+
+- name: Restart alloy
+  ansible.builtin.service:
+    name: alloy
+    state: restarted

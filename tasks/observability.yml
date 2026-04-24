@@ -1,0 +1,113 @@
+---
+# Grafana Alloy — unified agent that ships node + postgres metrics to
+# Grafana Cloud Prometheus and journald logs to Grafana Cloud Loki.
+# Alloy pushes outbound, so no inbound UFW port is required.
+#
+# Credentials live in vault.yml; endpoint URLs live in vars.yml. Gated on
+# observability_enabled so hosts without configured creds skip silently.
+
+- name: Observability (Grafana Alloy)
+  when: observability_enabled | default(false)
+  block:
+    - name: Assert Grafana Cloud credentials present
+      ansible.builtin.assert:
+        that:
+          - grafana_cloud_prom_url | length > 0
+          - grafana_cloud_loki_url | length > 0
+          - vault_grafana_cloud_prom_user | default('') | length > 0
+          - vault_grafana_cloud_prom_password | default('') | length > 0
+          - vault_grafana_cloud_loki_user | default('') | length > 0
+          - vault_grafana_cloud_loki_password | default('') | length > 0
+        fail_msg: >-
+          observability_enabled=true requires grafana_cloud_{prom,loki}_url
+          in inventory/group_vars/servers/vars.yml and
+          vault_grafana_cloud_{prom,loki}_{user,password} in vault.yml
+
+    - name: Ensure apt keyrings dir exists
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: Add Grafana apt signing key
+      ansible.builtin.get_url:
+        url: https://apt.grafana.com/gpg.key
+        dest: /etc/apt/keyrings/grafana.gpg
+        mode: "0644"
+
+    - name: Add Grafana apt repo
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/etc/apt/keyrings/grafana.gpg] https://apt.grafana.com stable main"
+        filename: grafana
+        state: present
+        update_cache: true
+
+    - name: Install alloy package
+      ansible.builtin.apt:
+        name: alloy
+        state: present
+
+    - name: Add alloy user to adm + systemd-journal groups (journald read)
+      ansible.builtin.user:
+        name: alloy
+        groups: adm,systemd-journal
+        append: true
+      notify: Restart alloy
+
+    # Peer auth: OS user `alloy` (created by the apt package) maps 1:1 to a
+    # DB role of the same name over /var/run/postgresql — no password needed.
+    - name: Create postgres monitoring role for alloy
+      community.postgresql.postgresql_user:
+        name: alloy
+        role_attr_flags: LOGIN
+        state: present
+      become: true
+      become_user: postgres
+
+    - name: Grant pg_monitor to alloy
+      community.postgresql.postgresql_membership:
+        source_role: pg_monitor
+        target_roles: alloy
+        state: present
+      become: true
+      become_user: postgres
+
+    - name: Ensure alloy systemd drop-in dir exists
+      ansible.builtin.file:
+        path: /etc/systemd/system/alloy.service.d
+        state: directory
+        mode: "0755"
+
+    - name: Install alloy systemd drop-in (EnvironmentFile)
+      ansible.builtin.copy:
+        src: files/alloy-override.conf
+        dest: /etc/systemd/system/alloy.service.d/override.conf
+        mode: "0644"
+      notify:
+        - Reload systemd
+        - Restart alloy
+
+    - name: Write alloy secrets env file
+      ansible.builtin.template:
+        src: templates/alloy-secrets.env.j2
+        dest: /etc/alloy/secrets.env
+        owner: alloy
+        group: alloy
+        mode: "0600"
+      notify: Restart alloy
+      no_log: true
+
+    - name: Render alloy config
+      ansible.builtin.template:
+        src: templates/alloy-config.alloy.j2
+        dest: /etc/alloy/config.alloy
+        owner: root
+        group: alloy
+        mode: "0640"
+      notify: Restart alloy
+
+    - name: Ensure alloy is enabled and running
+      ansible.builtin.service:
+        name: alloy
+        state: started
+        enabled: true

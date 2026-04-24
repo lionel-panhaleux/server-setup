@@ -205,6 +205,54 @@ restic snapshots
 restic restore latest --target /tmp/krcg-restore
 ```
 
+### Observability (Grafana Cloud + Alloy)
+
+`tasks/observability.yml` installs [Grafana Alloy](https://grafana.com/docs/alloy/) — a unified agent that replaces node_exporter + Promtail + any local Prometheus/Loki. Alloy ships:
+
+- Node metrics (CPU, memory, disk, network, systemd unit status) via `prometheus.exporter.unix`
+- Postgres metrics via `prometheus.exporter.postgres` (using a dedicated `alloy` DB role with `pg_monitor`, connecting over the Unix socket via peer auth — no DB password)
+- journald logs via `loki.source.journal`, with per-app labels extracted from `SYSLOG_IDENTIFIER` → `tag` so dashboards can filter by service (`{tag="krcg"}`)
+
+All traffic is outbound to Grafana Cloud endpoints — no inbound UFW port is opened.
+
+**One-time setup.** In [Grafana Cloud](https://grafana.com/auth/sign-in/) create an Access Policy with `metrics:write` and `logs:write` scopes, then an API token (one token covers both — it goes into both `*_password` vars). From the Stack → Details page copy the Prometheus push URL + instance ID (a numeric user) and Loki push URL + instance ID (a different numeric user).
+
+Add the URL placeholders in `inventory/group_vars/servers/vars.yml` with the real endpoints:
+
+```yaml
+grafana_cloud_prom_url: "https://prometheus-prod-XX-XXX.grafana.net/api/prom/push"
+grafana_cloud_loki_url: "https://logs-prod-XXX.grafana.net/loki/api/v1/push"
+```
+
+Add the secrets to `inventory/group_vars/servers/vault.yml` (vault-encrypted):
+
+```yaml
+vault_grafana_cloud_prom_user: "NUMERIC_PROM_INSTANCE_ID"
+vault_grafana_cloud_prom_password: "glc_..."
+vault_grafana_cloud_loki_user: "NUMERIC_LOKI_INSTANCE_ID"
+vault_grafana_cloud_loki_password: "glc_..."   # same token reused
+```
+
+**Enable** by flipping `observability_enabled: true` in `vars.yml` and re-running `setup.yml`. First run creates the `alloy` postgres role with `pg_monitor`, writes `/etc/alloy/secrets.env` (0600 alloy:alloy), renders `/etc/alloy/config.alloy`, and starts `alloy.service`.
+
+Sanity-check on the host:
+
+```bash
+systemctl status alloy
+ss -tnp | grep alloy    # outbound to Grafana Cloud only
+journalctl -u alloy -f  # config parse errors surface here
+```
+
+In Grafana Cloud → Explore, metrics should appear within ~60s (`up{host="strasbourg"}`) and logs within seconds (`{host="strasbourg", tag="krcg"}`).
+
+**Alert rules** (define in Grafana Cloud UI or via Terraform):
+
+- `last_over_time(ALERTS_FOR_STATE{alertname!=""}[5m]) == 0` — meta-check that alert eval is working
+- `time() - last_over_time(node_systemd_unit_state{name="postgres-backup.service", state="active"}[25h]) > 0` — daily backup hasn't run in 25h → P1
+- `node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes < 0.15` — disk < 15% → P2
+- `up{job="integrations/unix"} == 0` — host not scraping for >5m → P1
+- `pg_up == 0` or `nginx_up == 0` (via postgres exporter / node exporter systemd unit) — service down → P1
+
 ### `postgres_db`
 
 Creates a postgres database and owning role, applies web-app timeouts, and gets picked up automatically by the cluster-wide backup timer. Requires the `community.postgresql` collection (`ansible-galaxy collection install community.postgresql`).

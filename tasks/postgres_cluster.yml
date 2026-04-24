@@ -24,6 +24,29 @@
     label: "{{ item.path }}"
   notify: Restart postgresql
 
+- name: Configure postgres query + contention logging
+  ansible.builtin.copy:
+    dest: "{{ item.path }}/51-log-queries.conf"
+    content: |
+      # Managed by server-setup. Targeted visibility, not log_statement=all.
+      # Slow queries (>1s).
+      log_min_duration_statement = 1000
+      # Lock contention (waits > deadlock_timeout, default 1s).
+      log_lock_waits = on
+      # Autovacuum runs >1s — DB health signal.
+      log_autovacuum_min_duration = 1000
+      # Checkpoint cadence — storage IO pressure signal.
+      log_checkpoints = on
+      # DDL statements for a free audit trail.
+      log_statement = 'ddl'
+      # Temp files >10MB — bad plans / insufficient work_mem.
+      log_temp_files = 10240
+    mode: "0644"
+  loop: "{{ pg_confd_dirs.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  notify: Restart postgresql
+
 - name: Assert remote backup secrets are present
   ansible.builtin.assert:
     that:

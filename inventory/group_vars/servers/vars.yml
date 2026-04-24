@@ -1,6 +1,14 @@
 ansible_user: deploy
 ansible_ssh_private_key_file: ~/.ssh/deploy
 
+# Observability — Grafana Alloy ships node + postgres metrics and journald
+# logs to Grafana Cloud. URLs are non-secret (account-specific); credentials
+# and postgres DSN password live in the sibling vault.yml. Flip
+# observability_enabled to true once vault vars are populated (see README).
+observability_enabled: true
+grafana_cloud_prom_url: "https://prometheus-prod-65-prod-eu-west-2.grafana.net/api/prom/push"
+grafana_cloud_loki_url: "https://logs-prod-012.grafana.net/loki/api/v1/push"
+
 # Cluster-wide postgres backup (one systemd timer iterates every non-template
 # DB). setup.yml installs /usr/local/bin/pg-backup and postgres-backup.timer.
 postgres_backup_dir: /var/backups/postgres

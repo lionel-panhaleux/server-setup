@@ -25,6 +25,10 @@
       ansible.builtin.import_tasks: tasks/postgres_cluster.yml
       tags: [postgres]
 
+    - name: Observability
+      ansible.builtin.import_tasks: tasks/observability.yml
+      tags: [observability]
+
     - name: Inventory feedback
       ansible.builtin.import_tasks: tasks/inventory_feedback.yml
       tags: [feedback]

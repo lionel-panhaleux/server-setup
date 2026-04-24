@@ -15,6 +15,7 @@
       - logrotate
       - ufw
       - fail2ban
+      - gnupg
       - nginx
       - certbot
       - python3-certbot-nginx
@@ -105,6 +106,12 @@
     name: systemd-tmpfiles-clean.timer
     state: started
     enabled: true
+
+- name: Ensure journald conf.d directory exists
+  ansible.builtin.file:
+    path: /etc/systemd/journald.conf.d
+    state: directory
+    mode: "0755"
 
 - name: Configure journald persistence and size caps
   ansible.builtin.copy:
