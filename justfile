@@ -10,8 +10,9 @@ sync:
         ip=$(echo "$info" | python3 -c "import sys,json; print(json.load(sys.stdin)['ansible_host'])")
         host_key=$(echo "$info" | python3 -c "import sys,json; print(json.load(sys.stdin)['host_key'])")
         echo "→ $repo ($host): DEPLOY_HOST=$ip"
-        gh variable set DEPLOY_HOST --repo "$repo" --body "$ip"
-        gh variable set DEPLOY_HOST_KEY --repo "$repo" --body "$host_key"
+        gh api -X PUT "repos/$repo/environments/production" --silent
+        gh variable set DEPLOY_HOST --repo "$repo" --env production --body "$ip"
+        gh variable set DEPLOY_HOST_KEY --repo "$repo" --env production --body "$host_key"
     done
 
 # Sync DEPLOY_SSH_KEY to all GitHub repos' production environments
@@ -20,6 +21,7 @@ sync-key key_file:
     set -euo pipefail
     yq 'to_entries | .[] | .key' deploy-targets.yml | while read -r repo; do
         echo "→ $repo: DEPLOY_SSH_KEY"
+        gh api -X PUT "repos/$repo/environments/production" --silent
         gh secret set DEPLOY_SSH_KEY --repo "$repo" --env production < "{{ key_file }}"
     done
 
