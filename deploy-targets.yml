@@ -1,4 +1,6 @@
-# GitHub repo → inventory hostname
+# GitHub repo → deploy target. The value is either an inventory hostname (the
+# GitHub environment defaults to `production`) or a {host, env} map to push the
+# DEPLOY_* config into a non-default environment.
 lionel-panhaleux/krcg-api: strasbourg
 lionel-panhaleux/warroom-app: strasbourg
 lionel-panhaleux/krcg-static: strasbourg
@@ -7,6 +9,6 @@ lionel-panhaleux/timer: gravelines
 lionel-panhaleux/codex-of-the-damned: strasbourg
 lionel-panhaleux/archon-bot: gravelines
 vtes-biased/archon: frankfurt
-vtes-biased/archon-vibe: frankfurt
+vtes-biased/archon-vibe: {host: frankfurt, env: beta}
 vtes-biased/rulings-website: gravelines
 vtes-biased/vtes-lackeyccg: strasbourg
