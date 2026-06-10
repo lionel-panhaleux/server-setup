@@ -52,3 +52,9 @@ jobs:
       - name: Molecule test
         run: molecule test
         working-directory: roles/${{ matrix.role }}
+        env:
+          # molecule-plugins (<= 25.8.12, still unfixed on their main) docker
+          # create.yml reads item.invocation.module_args.dest, but ansible-core
+          # >= 2.21 omits `invocation` from task results by default. Re-enable
+          # injection until molecule-plugins ships a fix.
+          ANSIBLE_INJECT_INVOCATION: "true"

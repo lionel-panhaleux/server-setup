@@ -30,6 +30,9 @@ test role="":
     #!/usr/bin/env bash
     set -euo pipefail
     export PATH="{{ justfile_directory() }}/.venv/bin:$PATH"
+    # molecule-plugins docker create.yml needs `invocation` in task results,
+    # which ansible-core >= 2.21 omits by default (no-op on older cores).
+    export ANSIBLE_INJECT_INVOCATION=true
     ansible-galaxy collection install community.docker >/dev/null
     roles="{{ role }}"
     [ -z "$roles" ] && roles="nginx_site postgres_db"
