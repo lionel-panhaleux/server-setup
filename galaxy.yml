@@ -1,0 +1,51 @@
+---
+# Collection manifest: lets consumers install the shared roles straight from git
+# (requirements.yml `type: git`) — the repo stays a standalone deploy repo too;
+# build_ignore keeps the provisioning machinery out of the built artifact.
+namespace: lionel_panhaleux
+name: server_setup
+version: 1.0.0
+readme: README.md
+authors:
+  - Lionel Panhaleux <lionel.panhaleux@gmail.com>
+description: >-
+  Shared server foundation roles: nginx_site (static / SPA / reverse-proxy
+  vhosts with Let's Encrypt and journald logging) and postgres_db
+  (PostgreSQL database + owner user provisioning).
+license:
+  - MIT
+tags:
+  - infrastructure
+  - linux
+  - web
+  - database
+repository: https://github.com/lionel-panhaleux/server-setup
+issues: https://github.com/lionel-panhaleux/server-setup/issues
+dependencies:
+  community.postgresql: ">=3.10.0"
+build_ignore:
+  - .ansible
+  - .claude
+  - .github
+  - .gitignore
+  - .pre-commit-config.yaml
+  - .ansible-lint
+  - .yamllint
+  - .venv
+  - .vscode
+  - add-admin.yml
+  - ansible.cfg
+  - assets
+  - deploy-targets.yml
+  - files
+  - handlers
+  - inventory
+  - justfile
+  - pyproject.toml
+  - requirements.yml
+  - roles/*/molecule
+  - setup.yml
+  - tasks
+  - templates
+  - upgrade.yml
+  - uv.lock

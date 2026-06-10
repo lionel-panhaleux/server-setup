@@ -122,12 +122,14 @@ Deploys an nginx site with automatic Let's Encrypt issuance and journald logging
 - `spa` — static with `index.html` fallback + long-cache for hashed assets (Vite/TS PWAs)
 - `proxy` — reverse proxy to a WSGI/ASGI upstream (gunicorn, uvicorn, Unix socket or localhost port)
 
-Consumer app `requirements.yml`:
+The roles ship as the `lionel_panhaleux.server_setup` collection (`galaxy.yml`),
+installable straight from git. Consumer app `requirements.yml`:
 
 ```yaml
-- src: https://github.com/lionel-panhaleux/server-setup.git
-  name: server-setup
-  version: main
+collections:
+  - name: https://github.com/lionel-panhaleux/server-setup.git
+    type: git
+    version: main   # or a tag/SHA
 ```
 
 Consumer playbook (proxy example):
@@ -138,7 +140,7 @@ Consumer playbook (proxy example):
   vars:
     service_name: krcg_api       # flows to both nginx_site_name and postgres_db_name (alphanumeric + underscore only — becomes an nginx syslog tag)
   roles:
-    - role: server-setup/nginx_site
+    - role: lionel_panhaleux.server_setup.nginx_site
       vars:
         nginx_site_domain: api.krcg.org
         nginx_site_type: proxy
@@ -288,7 +290,7 @@ Setup (default `tasks/main.yml`):
   vars:
     service_name: krcg           # also used by nginx_site_name; override postgres_db_name only if they diverge
   roles:
-    - role: server-setup/postgres_db
+    - role: lionel_panhaleux.server_setup.postgres_db
       vars:
         postgres_db_user: krcg
         postgres_db_password: "{{ vault_postgres_db_password }}"
@@ -298,7 +300,7 @@ Restore is destructive — it drops and recreates the DB. Local restore takes a 
 
 ```yaml
 - include_role:
-    name: server-setup/postgres_db
+    name: lionel_panhaleux.server_setup.postgres_db
     tasks_from: restore
   vars:
     postgres_db_name: krcg
@@ -310,7 +312,7 @@ Remote restore fetches from the host's configured restic repo (requires `setup.y
 
 ```yaml
 - include_role:
-    name: server-setup/postgres_db
+    name: lionel_panhaleux.server_setup.postgres_db
     tasks_from: restore-remote
   vars:
     postgres_db_name: krcg
