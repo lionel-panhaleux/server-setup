@@ -30,6 +30,10 @@
         state: present
 
     - name: Apply per-database timeouts
+      # autocommit (needed for these ALTER DATABASE statements) is mutually
+      # exclusive with check mode, so this task can't run under --check; apply
+      # the timeouts only on a real run. Dry runs skip it cleanly.
+      when: not ansible_check_mode
       community.postgresql.postgresql_query:
         db: postgres
         query: "ALTER DATABASE {{ postgres_db_name }} SET {{ item.key }} = '{{ item.value }}'"

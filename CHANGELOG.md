@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.2
+
+- `postgres_db`: skip the per-database timeouts task under `--check`. It needs
+  `autocommit`, which `community.postgresql` rejects in check mode, so a dry run
+  of any consuming play would fail there. The timeouts still apply on real runs.
+
 ## 1.0.1
 
 - `postgres_db`: scope `become`/`become_user: postgres` to the role's task
