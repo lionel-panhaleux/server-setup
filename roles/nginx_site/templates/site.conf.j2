@@ -61,14 +61,22 @@ server {
 
 {% if cert_exists %}
 server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
     server_name {{ server_names | join(' ') }};
 
     ssl_certificate     /etc/letsencrypt/live/{{ nginx_site_domain }}/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/{{ nginx_site_domain }}/privkey.pem;
-    include /etc/letsencrypt/options-ssl-nginx.conf;
-    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+    # Self-contained SSL hardening. Do NOT include certbot's
+    # options-ssl-nginx.conf / ssl-dhparams.pem: those are installed only by the
+    # certbot *nginx* plugin, never by `certbot certonly --webroot` (the mode
+    # this role uses), so including them hard-fails `nginx -t` (missing file).
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:ssl_{{ nginx_site_name }}:10m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
 
 {{ log_directives() }}
     client_max_body_size {{ nginx_site_client_max_body_size }};

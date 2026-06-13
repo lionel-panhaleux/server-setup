@@ -35,7 +35,7 @@
       # the timeouts only on a real run. Dry runs skip it cleanly.
       when: not ansible_check_mode
       community.postgresql.postgresql_query:
-        db: postgres
+        login_db: postgres
         query: "ALTER DATABASE {{ postgres_db_name }} SET {{ item.key }} = '{{ item.value }}'"
         autocommit: true
       loop:

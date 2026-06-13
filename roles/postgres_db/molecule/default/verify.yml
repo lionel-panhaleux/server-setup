@@ -10,7 +10,7 @@
   tasks:
     - name: Confirm database exists
       community.postgresql.postgresql_query:
-        db: postgres
+        login_db: postgres
         query: "SELECT 1 FROM pg_database WHERE datname = %s"
         positional_args:
           - "{{ postgres_db_name }}"
@@ -22,7 +22,7 @@
 
     - name: Confirm role exists
       community.postgresql.postgresql_query:
-        db: postgres
+        login_db: postgres
         query: "SELECT 1 FROM pg_roles WHERE rolname = %s"
         positional_args:
           - "{{ postgres_db_user }}"
@@ -34,7 +34,7 @@
 
     - name: Fetch DB-level settings applied by the role
       community.postgresql.postgresql_query:
-        db: postgres
+        login_db: postgres
         query: >
           SELECT unnest(setconfig) AS setting
           FROM pg_db_role_setting s

@@ -38,16 +38,9 @@
         creates: "/etc/letsencrypt/live/{{ item }}/fullchain.pem"
       loop: "{{ _test_domains }}"
 
-    - name: Stub options-ssl-nginx.conf (empty is fine; nginx accepts empty include)
-      ansible.builtin.copy:
-        content: ""
-        dest: /etc/letsencrypt/options-ssl-nginx.conf
-        mode: "0644"
-
-    - name: Generate ssl-dhparams.pem (dsaparam mode — fast enough for tests)
-      ansible.builtin.command:
-        cmd: openssl dhparam -out /etc/letsencrypt/ssl-dhparams.pem -dsaparam 2048
-        creates: /etc/letsencrypt/ssl-dhparams.pem
+    # No options-ssl-nginx.conf / ssl-dhparams.pem stubs here: the HTTPS vhost
+    # inlines its SSL settings (certbot certonly --webroot never installs those
+    # files), so the test runs under the same condition as real deploys.
 
     # Normally installed by server-setup's tasks/base.yml; the role assumes it exists.
     - name: Install websocket upgrade map (required by proxy-type sites)
