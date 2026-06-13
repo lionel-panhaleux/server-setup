@@ -1,32 +1,41 @@
 ---
-- name: Validate inputs
-  ansible.builtin.assert:
-    that:
-      - postgres_db_name | length > 0
-      - postgres_db_user | length > 0
-      - postgres_db_password | length > 0
-    fail_msg: "postgres_db_name, postgres_db_user and postgres_db_password are required"
+# Every task here talks to postgres via peer auth, so the whole role runs as the
+# postgres OS user. Scoping become to this block (rather than role vars/main.yml)
+# keeps it inside the role: role vars set `ansible_become`/`ansible_become_user`,
+# which leak into the consumer's entire play and override its own become, so
+# unrelated tasks (and delegated localhost tasks) would wrongly run as postgres.
+- name: Create database and owner role
+  become: true
+  become_user: postgres
+  block:
+    - name: Validate inputs
+      ansible.builtin.assert:
+        that:
+          - postgres_db_name | length > 0
+          - postgres_db_user | length > 0
+          - postgres_db_password | length > 0
+        fail_msg: "postgres_db_name, postgres_db_user and postgres_db_password are required"
 
-- name: Create database role
-  community.postgresql.postgresql_user:
-    name: "{{ postgres_db_user }}"
-    password: "{{ postgres_db_password }}"
-    state: present
-  no_log: true
+    - name: Create database role
+      community.postgresql.postgresql_user:
+        name: "{{ postgres_db_user }}"
+        password: "{{ postgres_db_password }}"
+        state: present
+      no_log: true
 
-- name: Create database owned by role
-  community.postgresql.postgresql_db:
-    name: "{{ postgres_db_name }}"
-    owner: "{{ postgres_db_user }}"
-    state: present
+    - name: Create database owned by role
+      community.postgresql.postgresql_db:
+        name: "{{ postgres_db_name }}"
+        owner: "{{ postgres_db_user }}"
+        state: present
 
-- name: Apply per-database timeouts
-  community.postgresql.postgresql_query:
-    db: postgres
-    query: "ALTER DATABASE {{ postgres_db_name }} SET {{ item.key }} = '{{ item.value }}'"
-    autocommit: true
-  loop:
-    - { key: statement_timeout, value: "{{ postgres_db_statement_timeout }}" }
-    - { key: idle_in_transaction_session_timeout, value: "{{ postgres_db_idle_in_transaction_session_timeout }}" }
-    - { key: lock_timeout, value: "{{ postgres_db_lock_timeout }}" }
-  changed_when: false
+    - name: Apply per-database timeouts
+      community.postgresql.postgresql_query:
+        db: postgres
+        query: "ALTER DATABASE {{ postgres_db_name }} SET {{ item.key }} = '{{ item.value }}'"
+        autocommit: true
+      loop:
+        - { key: statement_timeout, value: "{{ postgres_db_statement_timeout }}" }
+        - { key: idle_in_transaction_session_timeout, value: "{{ postgres_db_idle_in_transaction_session_timeout }}" }
+        - { key: lock_timeout, value: "{{ postgres_db_lock_timeout }}" }
+      changed_when: false

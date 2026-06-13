@@ -1,5 +1,0 @@
----
-# Every task in this role talks to postgres via peer auth, so run them all as
-# the postgres OS user. Consumer plays don't need to set become for this role.
-ansible_become: true  # noqa: var-naming[no-role-prefix]
-ansible_become_user: postgres  # noqa: var-naming[no-role-prefix]
