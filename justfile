@@ -33,7 +33,9 @@ test role="":
     # molecule-plugins docker create.yml needs `invocation` in task results,
     # which ansible-core >= 2.21 omits by default (no-op on older cores).
     export ANSIBLE_INJECT_INVOCATION=true
-    ansible-galaxy collection install community.docker >/dev/null
+    # community.docker (molecule's docker driver) ships bundled in the `ansible`
+    # package pinned by pyproject, so it's already on the .venv collection path —
+    # no `ansible-galaxy collection install`, which would pollute ~/.ansible/collections.
     roles="{{ role }}"
     [ -z "$roles" ] && roles="nginx_site postgres_db"
     for r in $roles; do
