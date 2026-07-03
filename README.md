@@ -161,7 +161,7 @@ journalctl -t nginx_krcg_api -f
 
 ### Cluster-wide postgres backup
 
-`setup.yml` installs a single `postgres-backup.timer` that runs `/usr/local/bin/pg-backup` daily. The script iterates every non-template database in the cluster, dumps each to `/var/backups/postgres/<db>-<timestamp>.dump` (pg_dump's custom format — binary, compressed, restorable with `pg_restore`), and prunes local dumps older than `postgres_backup_retention_days` (default `7`).
+`setup.yml` installs a single `postgres-backup.timer` that runs `/usr/local/bin/pg-backup` daily. The script iterates every non-template database in the cluster, dumps each to `/var/backups/postgres/<db>-<timestamp>.dump` (pg_dump's custom format — binary, compressed, restorable with `pg_restore`), dumps cluster globals (`pg_dumpall --globals-only` — login roles, password hashes, memberships; without them a full-cluster restore has no roles for the apps to connect as), and prunes local files older than `postgres_backup_retention_days` (default `7`).
 
 New databases created by the `postgres_db` role are picked up automatically on the next timer fire — no re-run needed.
 
@@ -208,6 +208,21 @@ export RESTIC_REPOSITORY=s3:https://s3.fr-par.scw.cloud/your-bucket/krcg
 restic snapshots
 restic restore latest --target /tmp/krcg-restore
 ```
+
+#### Weekly restore-verify
+
+`setup.yml` also installs `postgres-backup-check.timer` (weekly): with remote backup enabled it runs `restic check --read-data-subset=1/10` per repo (bit-rot detection) and restore-round-trips the latest snapshot; without remote it round-trips the newest local dump. Either way the round-trip goes into a throwaway `pg_check_<db>` database that must contain at least one user table — catching dumps that exist but don't restore. A free-space guard skips (and fails) the round-trip rather than fill the PGDATA filesystem.
+
+#### Failure alerting (opt-in dead-man's switch)
+
+Both scripts optionally ping a [healthchecks.io](https://healthchecks.io)-style URL: `GET <url>` on success, `GET <url>/fail` on failure. Absence of the success ping catches the failure mode logs can't — the timer that silently stopped firing. Set in `inventory/group_vars/servers/vault.yml` (ping UUIDs are capability URLs, so vault them):
+
+```yaml
+vault_postgres_backup_healthcheck_url: "https://hc-ping.com/..."         # daily backup
+vault_postgres_backup_check_healthcheck_url: "https://hc-ping.com/..."  # weekly check
+```
+
+Give the daily check a ~2h grace period and the weekly one a few hours, to absorb timer jitter and run time. Unset = no pings.
 
 ### Observability (Grafana Cloud + Alloy)
 

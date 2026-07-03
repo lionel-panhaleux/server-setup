@@ -1,5 +1,5 @@
 [Unit]
-Description=Weekly restic check of postgres backup repositories
+Description=Weekly restore-verify of postgres backups
 After=network-online.target postgresql.service
 Wants=network-online.target
 Requires=postgresql.service
@@ -9,7 +9,13 @@ Type=oneshot
 User=postgres
 Group=postgres
 SyslogIdentifier=postgres-backup-check
+Environment=BACKUP_DIR={{ postgres_backup_dir }}
 {% if remote_backup_enabled | default(false) %}
 EnvironmentFile=/etc/postgres-backup/remote.env
 {% endif %}
+# Dead-man's-switch ping URLs; the '-' tolerates the file being absent.
+EnvironmentFile=-/etc/postgres-backup/healthcheck.env
+# The pg_restore round-trip yields to the live workloads.
+Nice=10
+IOSchedulingClass=idle
 ExecStart=/usr/local/bin/pg-backup-check

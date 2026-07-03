@@ -60,14 +60,31 @@
       (vault-encrypted), and postgres_remote_backup_bucket in inventory
   when: remote_backup_enabled | default(false)
 
-- name: Ensure remote backup config dir exists
+- name: Ensure backup config dir exists
   ansible.builtin.file:
     path: /etc/postgres-backup
     state: directory
     owner: root
     group: postgres
     mode: "0750"
-  when: remote_backup_enabled | default(false)
+
+- name: Write healthcheck ping URLs
+  # Capability URLs (healthchecks.io-style ping UUIDs) — vault-held; the
+  # scripts no-op without the file (units load it with `EnvironmentFile=-`).
+  # A dead-man's switch complements Alloy/Grafana alerting: absence of the
+  # success ping catches "the timer never fired", which logs can't.
+  ansible.builtin.copy:
+    content: |
+      BACKUP_HEALTHCHECK_URL={{ vault_postgres_backup_healthcheck_url | default('') }}
+      CHECK_HEALTHCHECK_URL={{ vault_postgres_backup_check_healthcheck_url | default('') }}
+    dest: /etc/postgres-backup/healthcheck.env
+    owner: root
+    group: postgres
+    mode: "0640"
+  when: >-
+    (vault_postgres_backup_healthcheck_url | default('') | length > 0)
+    or (vault_postgres_backup_check_healthcheck_url | default('') | length > 0)
+  no_log: true
 
 - name: Write remote backup credentials
   ansible.builtin.copy:

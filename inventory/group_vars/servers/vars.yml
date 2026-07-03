@@ -25,3 +25,10 @@ postgres_remote_backup_endpoint: "https://s3.fr-par.scw.cloud"
 postgres_remote_backup_keep_daily: 7
 postgres_remote_backup_keep_weekly: 4
 postgres_remote_backup_keep_monthly: 12
+
+# Optional dead-man's-switch pings (healthchecks.io-style): the backup and
+# check scripts GET the URL on success and <url>/fail on failure, so a timer
+# that silently stops firing alerts by ABSENCE of pings — the failure mode
+# Alloy/Grafana log alerting can't see. Set vault_postgres_backup_healthcheck_url
+# and vault_postgres_backup_check_healthcheck_url in the sibling vault.yml
+# (ping UUIDs are capability URLs); unset = no pings.
