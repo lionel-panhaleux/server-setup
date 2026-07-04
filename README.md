@@ -170,8 +170,11 @@ Tune via `inventory/group_vars/servers/vars.yml`:
 - `postgres_backup_dir` — default `/var/backups/postgres`
 - `postgres_backup_schedule` — default `daily` (any `OnCalendar=` expression)
 - `postgres_backup_retention_days` — default `7`
+- `postgres_backup_exclude` — default `[]`; ephemeral DBs to skip (set per host in `host_vars/`). Scratch/reseed DBs churn near-full-size snapshots (rewritten data doesn't dedup) for backups nothing will ever restore.
 
 One DB failing doesn't stop the others; the script aggregates failures and exits nonzero so `systemctl status postgres-backup` surfaces the problem.
+
+Local pruning sweeps the whole backup dir by age, so dumps of dropped or excluded DBs age out too. Remote repos have no such sweep — a dropped/excluded DB's restic repo is never pruned again and holds its space forever. The nightly run therefore ends with an orphan scan (rclone lists the bucket's prefixes) that logs a journald warning per repo without a backed-up database; deleting a repo (`rclone purge` its prefix) stays a deliberate manual act.
 
 #### Remote backup to Scaleway Object Storage (opt-in)
 

@@ -29,6 +29,15 @@ notify() {
     /usr/bin/logger -t "$1" -p user.info "check: $2"
 }
 
+is_excluded() {
+    # Same EXCLUDE_DBS contract as pg-backup.sh: DBs excluded from backup
+    # have nothing to verify — checking them would fail every run.
+    case " ${EXCLUDE_DBS:-} " in
+        *" $1 "*) return 0 ;;
+    esac
+    return 1
+}
+
 check_repo() {
     local db="$1"
     export RESTIC_REPOSITORY="$RESTIC_REPOSITORY_BASE/$db"
@@ -143,6 +152,10 @@ verify_local() {
 DBS=$(/usr/bin/psql -tAc "SELECT datname FROM pg_database WHERE datistemplate = false AND datname != 'postgres' AND datname NOT LIKE 'pg_check_%'")
 
 for db in $DBS; do
+    if is_excluded "$db"; then
+        notify "$db" "excluded (EXCLUDE_DBS), skipping"
+        continue
+    fi
     if [ -n "${RESTIC_REPOSITORY_BASE:-}" ]; then
         check_repo "$db" || FAIL=1
         verify_remote "$db" || FAIL=1

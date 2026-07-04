@@ -1,1 +1,8 @@
 host_key: "57.129.110.107 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKi0jsqcMHjKjDZ5mzs8COi+6A04jpAZX8QUbWPhfoeu root@vps-20a81033"
+
+# archon beta scratch DBs — scrapped/reseeded at will, no recovery value;
+# prod-side backups (vekn.net box) are the real safety net for archon data.
+postgres_backup_exclude:
+  - archondb
+  - new_archon
+  - archon_legacy

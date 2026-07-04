@@ -14,6 +14,12 @@ grafana_cloud_loki_url: "https://logs-prod-012.grafana.net/loki/api/v1/push"
 postgres_backup_dir: /var/backups/postgres
 postgres_backup_retention_days: 7
 postgres_backup_schedule: "daily"   # systemd OnCalendar= expression
+# Ephemeral DBs to skip (per-host override in host_vars): scratch/reseed DBs
+# whose backups have no recovery value — backing them up churns near-full-size
+# snapshots (rewritten data doesn't dedup) and their repos outlive them.
+# After excluding a DB, delete its now-frozen bucket prefix by hand; the
+# nightly orphan scan warns about such repos via journald.
+postgres_backup_exclude: []
 
 # Remote upload via restic (one repo per DB at s3:<endpoint>/<bucket>/<db>).
 # When remote_backup_enabled, setup.yml writes /etc/postgres-backup/remote.env

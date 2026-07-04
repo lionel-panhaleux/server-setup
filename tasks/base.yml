@@ -33,6 +33,7 @@
       - git
       - acl
       - restic
+      - rclone  # pg-backup's orphan-repo scan (restic can't list bucket prefixes)
     state: present
 
 - name: Enable automatic security updates

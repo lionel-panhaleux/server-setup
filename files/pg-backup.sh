@@ -10,6 +10,8 @@
 #
 # Inputs (env):
 #   BACKUP_DIR, RETENTION_DAYS — required
+#   EXCLUDE_DBS — optional space-separated DB names to skip: ephemeral DBs
+#   (scratch/beta reseeds) whose backups have no recovery value.
 #   BACKUP_HEALTHCHECK_URL — optional dead-man's-switch ping (healthchecks.io
 #   style: GET on success, GET <url>/fail on failure), from healthcheck.env.
 #   Remote upload is enabled by the presence of RESTIC_REPOSITORY_BASE, which
@@ -27,6 +29,13 @@ FAIL=0
 
 notify() {
     /usr/bin/logger -t "$1" -p user.info "backup: $2"
+}
+
+is_excluded() {
+    case " ${EXCLUDE_DBS:-} " in
+        *" $1 "*) return 0 ;;
+    esac
+    return 1
 }
 
 restic_push() {
@@ -70,8 +79,6 @@ backup_db() {
         restic_push "$db" "$dump" || return 1
     fi
 
-    # Local prune runs regardless of remote outcome (disk-full prevention).
-    /usr/bin/find "$BACKUP_DIR" -name "$db-*.dump" -mtime "+$RETENTION_DAYS" -delete
     notify "$db" "complete"
 }
 
@@ -93,16 +100,47 @@ backup_globals() {
         restic_push globals "$dump" || return 1
     fi
 
-    /usr/bin/find "$BACKUP_DIR" -name "globals-*.sql" -mtime "+$RETENTION_DAYS" -delete
     notify globals "complete"
 }
 
 DBS=$(/usr/bin/psql -tAc "SELECT datname FROM pg_database WHERE datistemplate = false AND datname != 'postgres'")
 
 for db in $DBS; do
+    if is_excluded "$db"; then
+        notify "$db" "excluded (EXCLUDE_DBS), skipping"
+        continue
+    fi
     backup_db "$db" || FAIL=1
 done
 backup_globals || FAIL=1
+
+# Prune ALL aged local files, not per-live-DB: dumps of since-dropped or
+# excluded databases must age out too. Runs even after upstream failures
+# (disk-full prevention).
+/usr/bin/find "$BACKUP_DIR" \( -name "*.dump" -o -name "*.sql" \) \
+    -mtime "+$RETENTION_DAYS" -delete
+
+# Best-effort orphan scan: one restic repo per DB means a dropped or excluded
+# DB leaves a repo forget/prune never touches again — it holds bucket space
+# forever. Surface those; deleting backups stays a deliberate manual act.
+if [ -n "${RESTIC_REPOSITORY_BASE:-}" ]; then
+    BASE="${RESTIC_REPOSITORY_BASE#s3:}"
+    BUCKET="${BASE##*/}"
+    if PREFIXES=$(RCLONE_S3_ENDPOINT="${BASE%/"$BUCKET"}" \
+            /usr/bin/rclone lsf --dirs-only ":s3,provider=Other,env_auth:$BUCKET" 2>/dev/null); then
+        for repo in $PREFIXES; do
+            repo="${repo%/}"
+            [ "$repo" = globals ] && continue
+            if ! echo "$DBS" | grep -qx "$repo" || is_excluded "$repo"; then
+                /usr/bin/logger -t postgres-backup -p user.warning \
+                    "repo '$repo' has no backed-up database (dropped or excluded) — never pruned; delete its bucket prefix manually if obsolete"
+            fi
+        done
+    else
+        /usr/bin/logger -t postgres-backup -p user.warning \
+            "orphan-repo scan failed (rclone)"
+    fi
+fi
 
 # Dead-man's switch: a backup that silently stops running pages by ABSENCE of
 # the success ping; failures ping the /fail endpoint for immediate alerting.

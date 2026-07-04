@@ -10,6 +10,7 @@ User=postgres
 Group=postgres
 SyslogIdentifier=postgres-backup-check
 Environment=BACKUP_DIR={{ postgres_backup_dir }}
+Environment="EXCLUDE_DBS={{ postgres_backup_exclude | default([]) | join(' ') }}"
 {% if remote_backup_enabled | default(false) %}
 EnvironmentFile=/etc/postgres-backup/remote.env
 {% endif %}
