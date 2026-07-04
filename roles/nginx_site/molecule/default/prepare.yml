@@ -7,6 +7,7 @@
       - static.molecule.test
       - spa.molecule.test
       - proxy.molecule.test
+      - api.molecule.test
   tasks:
     - name: Refresh apt cache
       ansible.builtin.apt:

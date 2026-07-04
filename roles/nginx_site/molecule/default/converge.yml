@@ -42,3 +42,13 @@
         nginx_site_domain: proxy.molecule.test
         nginx_site_type: proxy
         nginx_site_upstream: "http://127.0.0.1:8000"
+
+    - name: Deploy a proxy site with whole-site CORS (open API)
+      ansible.builtin.include_role:
+        name: nginx_site
+      vars:
+        nginx_site_name: mol_api
+        nginx_site_domain: api.molecule.test
+        nginx_site_type: proxy
+        nginx_site_upstream: "http://127.0.0.1:8000"
+        nginx_site_open_api_paths: ["/"]

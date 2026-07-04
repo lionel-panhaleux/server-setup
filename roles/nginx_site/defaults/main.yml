@@ -16,7 +16,7 @@ nginx_site_upstream: ""  # "http://127.0.0.1:8000" or "http://unix:/run/krcg.soc
 
 # Optional
 nginx_site_aliases: []                  # additional server_name entries
-nginx_site_open_api_paths: []           # path prefixes that get permissive CORS
+nginx_site_open_api_paths: []           # path prefixes that get permissive CORS (["/"] = whole site, for proxy sites)
 nginx_site_plain_http_paths: []         # path prefixes served over plain HTTP (no HTTPS redirect)
 nginx_site_client_max_body_size: "10m"
 nginx_site_extra_locations: ""          # raw nginx snippet appended to the HTTPS server

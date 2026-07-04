@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.3
+
+- `nginx_site`: support `nginx_site_open_api_paths: ["/"]` on proxy sites
+  (whole-site permissive CORS for public APIs). The root location from the
+  open-API loop previously collided with the proxy default `location /`,
+  making `nginx -t` fail on a duplicate location.
+
 ## 1.0.2
 
 - `postgres_db`: skip the per-database timeouts task under `--check`. It needs

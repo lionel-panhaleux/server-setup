@@ -115,9 +115,12 @@ server {
         try_files $uri $uri/ /index.html;
     }
 {% elif nginx_site_type == "proxy" %}
+{# "/" in nginx_site_open_api_paths already emitted the root location (with CORS) above #}
+{% if "/" not in nginx_site_open_api_paths %}
     location / {
 {{ proxy_block() }}
     }
+{% endif %}
 {% endif %}
 
 {{ nginx_site_extra_locations }}

@@ -17,6 +17,7 @@
         - mol_static
         - mol_spa
         - mol_proxy
+        - mol_api
 
     - name: Symlinks resolve to sites-available
       ansible.builtin.assert:
@@ -26,3 +27,16 @@
       loop: "{{ site_stat.results }}"
       loop_control:
         label: "{{ item.item }}"
+
+    - name: Read the open-API site config
+      ansible.builtin.slurp:
+        src: /etc/nginx/sites-available/mol_api.conf
+      register: mol_api_conf
+
+    - name: Whole-site CORS proxies the root location exactly once
+      ansible.builtin.assert:
+        that:
+          - "'Access-Control-Allow-Origin' in _conf"
+          - _conf | regex_findall('location / \{') | length == 2  # one per server (80 redirect + 443)
+      vars:
+        _conf: "{{ mol_api_conf.content | b64decode }}"
