@@ -21,12 +21,20 @@
       ansible.builtin.import_tasks: tasks/host_tuning.yml
       tags: [tuning]
 
+    - name: Check for a postgres installation
+      ansible.builtin.stat:
+        path: /etc/postgresql
+      register: postgres_etc
+      tags: [postgres]
+
     - name: Postgres cluster backup
       ansible.builtin.import_tasks: tasks/postgres_cluster.yml
       tags: [postgres]
-      # configured via group_vars/servers (alongside the vault): a host run
-      # with an ad-hoc inventory (e.g. first bootstrap) skips this stage
-      when: postgres_backup_dir is defined
+      # only for hosts that actually run postgres (the tasks chown to the
+      # postgres user), with the backup config loaded — postgres_backup_*
+      # live in group_vars/servers alongside the vault, so a host run with
+      # an ad-hoc inventory (e.g. first bootstrap) skips this stage too
+      when: postgres_backup_dir is defined and postgres_etc.stat.exists
 
     - name: Observability
       ansible.builtin.import_tasks: tasks/observability.yml

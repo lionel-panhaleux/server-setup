@@ -9,10 +9,13 @@
   register: ssh_host_pubkey
 
 - name: Write host key to inventory
-  ansible.builtin.copy:
-    content: |
-      host_key: "{{ ansible_host }} {{ ssh_host_pubkey.content | b64decode | trim }}"
-    dest: "{{ playbook_dir }}/inventory/host_vars/{{ inventory_hostname }}.yml"
+  # lineinfile, not copy: host_vars files can carry hand-maintained vars
+  # (e.g. frankfurt's postgres_backup_exclude) that must survive the stamp
+  ansible.builtin.lineinfile:
+    path: "{{ playbook_dir }}/inventory/host_vars/{{ inventory_hostname }}.yml"
+    regexp: '^host_key:'
+    line: 'host_key: "{{ ansible_host }} {{ ssh_host_pubkey.content | b64decode | trim }}"'
+    create: true
     mode: "0644"
   delegate_to: localhost
   become: false
