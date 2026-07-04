@@ -68,7 +68,7 @@
       certbot certonly --webroot -w /var/www/certbot
       --cert-name {{ nginx_site_domain }}
       -d {{ nginx_site_domain }}
-      {% for a in nginx_site_aliases %}-d {{ a }} {% endfor %}
+      {% for a in nginx_site_aliases + nginx_site_cert_extra_domains %}-d {{ a }} {% endfor %}
       --expand --non-interactive --agree-tos --register-unsafely-without-email
   vars:
     nginx_site_cert_covered: >-
@@ -76,7 +76,7 @@
          | regex_findall('DNS:([^,\s]+)') }}
   when: >-
     not nginx_site_cert.stat.exists or
-    (([nginx_site_domain] + nginx_site_aliases)
+    (([nginx_site_domain] + nginx_site_aliases + nginx_site_cert_extra_domains)
      | difference(nginx_site_cert_covered) | length > 0)
   notify: Reload nginx
 

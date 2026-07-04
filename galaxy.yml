@@ -4,7 +4,7 @@
 # build_ignore keeps the provisioning machinery out of the built artifact.
 namespace: lionel_panhaleux
 name: server_setup
-version: 1.0.4
+version: 1.0.5
 readme: README.md
 authors:
   - Lionel Panhaleux <lionel.panhaleux@gmail.com>

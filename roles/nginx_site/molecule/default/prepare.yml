@@ -4,10 +4,11 @@
   gather_facts: true
   vars:
     _test_domains:
-      - static.molecule.test
-      - spa.molecule.test
-      - proxy.molecule.test
-      - api.molecule.test
+      - domain: static.molecule.test
+      - domain: spa.molecule.test
+      - domain: proxy.molecule.test
+      - domain: api.molecule.test
+        extra_sans: [alias.molecule.test]
   tasks:
     - name: Refresh apt cache
       ansible.builtin.apt:
@@ -22,23 +23,30 @@
 
     - name: Create LE directory per test domain
       ansible.builtin.file:
-        path: "/etc/letsencrypt/live/{{ item }}"
+        path: "/etc/letsencrypt/live/{{ item.domain }}"
         state: directory
         mode: "0755"
       loop: "{{ _test_domains }}"
+      loop_control:
+        label: "{{ item.domain }}"
 
-    # Pre-populating the cert at the expected path makes the role's certbot
-    # task a no-op via its `creates:` guard, so no live LE call is attempted.
+    # Pre-populating the cert at the expected path (with SANs covering the
+    # site's domains) makes the role's certbot task a no-op via its coverage
+    # check, so no live LE call is attempted (certbot isn't even installed:
+    # an uncovered domain fails converge loudly).
     - name: Generate self-signed cert per test domain
       ansible.builtin.command:
         cmd: >-
           openssl req -x509 -nodes -newkey rsa:2048 -days 3650
-          -keyout /etc/letsencrypt/live/{{ item }}/privkey.pem
-          -out /etc/letsencrypt/live/{{ item }}/fullchain.pem
-          -subj "/CN={{ item }}"
-          -addext "subjectAltName=DNS:{{ item }}"
-        creates: "/etc/letsencrypt/live/{{ item }}/fullchain.pem"
+          -keyout /etc/letsencrypt/live/{{ item.domain }}/privkey.pem
+          -out /etc/letsencrypt/live/{{ item.domain }}/fullchain.pem
+          -subj "/CN={{ item.domain }}"
+          -addext "subjectAltName=DNS:{{ item.domain }}{%
+            for san in item.extra_sans | default([]) %},DNS:{{ san }}{% endfor %}"
+        creates: "/etc/letsencrypt/live/{{ item.domain }}/fullchain.pem"
       loop: "{{ _test_domains }}"
+      loop_control:
+        label: "{{ item.domain }}"
 
     # No options-ssl-nginx.conf / ssl-dhparams.pem stubs here: the HTTPS vhost
     # inlines its SSL settings (certbot certonly --webroot never installs those

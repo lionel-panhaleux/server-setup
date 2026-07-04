@@ -52,3 +52,6 @@
         nginx_site_type: proxy
         nginx_site_upstream: "http://127.0.0.1:8000"
         nginx_site_open_api_paths: ["/"]
+        # exercises the cert coverage check: the prepared cert carries this
+        # SAN, so the role must NOT invoke certbot (not installed here)
+        nginx_site_cert_extra_domains: [alias.molecule.test]

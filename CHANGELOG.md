@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.5
+
+- `nginx_site`: new `nginx_site_cert_extra_domains` — extra SANs requested on
+  the site's certificate beyond its domain and aliases. Lets a domain that
+  will later move to the site as an alias (e.g. an apex flipping between
+  versioned sites) be covered from first issuance, so the move is a pure
+  `server_name` change with no certificate operation.
+
 ## 1.0.4
 
 - `nginx_site`: re-issue the Let's Encrypt certificate (`certbot --expand`)
