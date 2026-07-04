@@ -29,15 +29,30 @@
         state: directory
         mode: "0755"
 
+    # Grafana serves an ASCII-armored key: apt only reads armored keys from
+    # signed-by= when the file is named *.asc (*.gpg must be dearmored binary).
+    # Drop the misnamed leftovers first so hosts that got them converge.
+    - name: Remove misnamed Grafana apt repo entry
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/etc/apt/keyrings/grafana.gpg] https://apt.grafana.com stable main"
+        filename: grafana
+        state: absent
+        update_cache: false
+
+    - name: Remove misnamed Grafana key file
+      ansible.builtin.file:
+        path: /etc/apt/keyrings/grafana.gpg
+        state: absent
+
     - name: Add Grafana apt signing key
       ansible.builtin.get_url:
         url: https://apt.grafana.com/gpg.key
-        dest: /etc/apt/keyrings/grafana.gpg
+        dest: /etc/apt/keyrings/grafana.asc
         mode: "0644"
 
     - name: Add Grafana apt repo
       ansible.builtin.apt_repository:
-        repo: "deb [signed-by=/etc/apt/keyrings/grafana.gpg] https://apt.grafana.com stable main"
+        repo: "deb [signed-by=/etc/apt/keyrings/grafana.asc] https://apt.grafana.com stable main"
         filename: grafana
         state: present
         update_cache: true
