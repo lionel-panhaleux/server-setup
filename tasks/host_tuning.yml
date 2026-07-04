@@ -35,10 +35,11 @@
         cmd: swapon /swapfile
       changed_when: true
 
+# lineinfile, not ansible.posix.mount: the mount module is just an fstab
+# editor for swap entries, and its deprecated ansible-core imports spray
+# warnings on every run. Same line, same idempotence, builtin.
 - name: Persist swapfile in fstab
-  ansible.posix.mount:
-    name: none
-    src: /swapfile
-    fstype: swap
-    opts: sw
-    state: present
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    regexp: '^/swapfile\s'
+    line: "/swapfile none swap sw 0 0"
