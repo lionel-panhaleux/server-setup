@@ -2,9 +2,23 @@
 driver:
   name: docker
 
+# Both fleet OS generations: bookworm's nginx 1.22 predates `http2 on;`
+# (which trixie's supports) — the role must converge on each.
 platforms:
   - name: nginx-test
     image: debian:trixie
+    dockerfile: Dockerfile
+    pre_build_image: false
+    privileged: true
+    command: /sbin/init
+    cgroupns_mode: host
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+    tmpfs:
+      - /run
+      - /tmp
+  - name: nginx-test-bookworm
+    image: debian:12
     dockerfile: Dockerfile
     pre_build_image: false
     privileged: true
@@ -23,8 +37,8 @@ provisioner:
     # auto-generated "<author>.nginx_site" symlink.
     ANSIBLE_ROLES_PATH: "${MOLECULE_PROJECT_DIRECTORY}/../"
   inventory:
-    host_vars:
-      nginx-test:
+    group_vars:
+      all:
         ansible_python_interpreter: /usr/bin/python3
 
 verifier:

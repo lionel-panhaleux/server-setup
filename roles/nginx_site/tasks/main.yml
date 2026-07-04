@@ -18,6 +18,22 @@
       nginx_site_name must contain only alphanumeric and underscore
       (it becomes an nginx syslog tag). Got: "{{ nginx_site_name }}"
 
+# nginx < 1.25.1 (e.g. Debian 12's 1.22) predates the `http2 on;` directive
+# and needs the legacy `listen ... http2` parameter (itself deprecated in
+# newer nginx): detect the version once, the template picks the right syntax.
+- name: Detect nginx version
+  ansible.builtin.command:
+    cmd: nginx -v
+  register: nginx_site_version
+  changed_when: false
+
+- name: Compute http2 directive style
+  ansible.builtin.set_fact:
+    nginx_site_modern_http2: >-
+      {{ ((nginx_site_version.stderr ~ nginx_site_version.stdout)
+          | regex_search('nginx/(\d+\.\d+(?:\.\d+)?)', '\1')
+          | first) is version('1.25.1', '>=') }}
+
 - name: Ensure certbot webroot
   ansible.builtin.file:
     path: /var/www/certbot

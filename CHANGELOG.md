@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.6
+
+- `nginx_site`: support nginx < 1.25.1 (Debian 12 ships 1.22): `http2 on;`
+  does not exist there, so a rendered vhost failed `nginx -t` and wedged all
+  reloads on the host. The role now detects the nginx version and falls back
+  to the legacy `listen … http2` parameter.
+- molecule: the nginx_site scenario converges on both `debian:12` and
+  `debian:trixie`, so distro-specific nginx syntax breaks surface in CI
+  instead of on the fleet.
+
 ## 1.0.5
 
 - `nginx_site`: new `nginx_site_cert_extra_domains` — extra SANs requested on
