@@ -24,6 +24,9 @@
     - name: Postgres cluster backup
       ansible.builtin.import_tasks: tasks/postgres_cluster.yml
       tags: [postgres]
+      # configured via group_vars/servers (alongside the vault): a host run
+      # with an ad-hoc inventory (e.g. first bootstrap) skips this stage
+      when: postgres_backup_dir is defined
 
     - name: Observability
       ansible.builtin.import_tasks: tasks/observability.yml
