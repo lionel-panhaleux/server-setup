@@ -36,6 +36,7 @@
           -keyout /etc/letsencrypt/live/{{ item }}/privkey.pem
           -out /etc/letsencrypt/live/{{ item }}/fullchain.pem
           -subj "/CN={{ item }}"
+          -addext "subjectAltName=DNS:{{ item }}"
         creates: "/etc/letsencrypt/live/{{ item }}/fullchain.pem"
       loop: "{{ _test_domains }}"
 

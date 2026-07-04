@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.4
+
+- `nginx_site`: re-issue the Let's Encrypt certificate (`certbot --expand`)
+  when the desired domain set is not covered by the existing cert's SANs —
+  so an apex domain can move between sites as an alias. Previously a cert was
+  only requested when none existed, and alias changes never re-issued it.
+
 ## 1.0.3
 
 - `nginx_site`: support `nginx_site_open_api_paths: ["/"]` on proxy sites

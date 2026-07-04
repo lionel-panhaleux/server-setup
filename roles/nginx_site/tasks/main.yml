@@ -50,15 +50,35 @@
 - name: Reload nginx before requesting certificate
   ansible.builtin.meta: flush_handlers
 
-- name: Request Let's Encrypt certificate
+# A cert can exist but predate an alias change (e.g. an apex domain moved to
+# this site as an alias): compare its SANs to the desired domain set and
+# re-issue with --expand when any name is missing.
+- name: Read certificate domain coverage
+  ansible.builtin.command:
+    cmd: >-
+      openssl x509 -noout -ext subjectAltName
+      -in /etc/letsencrypt/live/{{ nginx_site_domain }}/fullchain.pem
+  register: nginx_site_cert_sans
+  changed_when: false
+  when: nginx_site_cert.stat.exists
+
+- name: Request Let's Encrypt certificate (issue, or expand for new aliases)
   ansible.builtin.command:
     cmd: >-
       certbot certonly --webroot -w /var/www/certbot
+      --cert-name {{ nginx_site_domain }}
       -d {{ nginx_site_domain }}
       {% for a in nginx_site_aliases %}-d {{ a }} {% endfor %}
-      --non-interactive --agree-tos --register-unsafely-without-email
-    creates: "/etc/letsencrypt/live/{{ nginx_site_domain }}/fullchain.pem"
-  when: not nginx_site_cert.stat.exists
+      --expand --non-interactive --agree-tos --register-unsafely-without-email
+  vars:
+    nginx_site_cert_covered: >-
+      {{ (nginx_site_cert_sans.stdout | default(''))
+         | regex_findall('DNS:([^,\s]+)') }}
+  when: >-
+    not nginx_site_cert.stat.exists or
+    (([nginx_site_domain] + nginx_site_aliases)
+     | difference(nginx_site_cert_covered) | length > 0)
+  notify: Reload nginx
 
 - name: Re-check certificate
   ansible.builtin.stat:
