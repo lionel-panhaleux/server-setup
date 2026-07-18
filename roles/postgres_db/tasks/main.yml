@@ -36,7 +36,8 @@
       when: not ansible_check_mode
       community.postgresql.postgresql_query:
         login_db: postgres
-        query: "ALTER DATABASE {{ postgres_db_name }} SET {{ item.key }} = '{{ item.value }}'"
+        # Double-quote the db name so hyphenated identifiers (e.g. vtes-rulings) are valid SQL.
+        query: "ALTER DATABASE \"{{ postgres_db_name }}\" SET {{ item.key }} = '{{ item.value }}'"
         autocommit: true
       loop:
         - { key: statement_timeout, value: "{{ postgres_db_statement_timeout }}" }
