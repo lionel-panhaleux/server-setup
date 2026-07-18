@@ -25,6 +25,16 @@ sync-key key_file:
         gh secret set DEPLOY_SSH_KEY --repo "$repo" --env "$env" < "{{ key_file }}"
     done
 
+# Upgrade ansible-core (uv tool) and the Galaxy collections in requirements.yml
+update:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "==> ansible-core"
+    uv tool upgrade ansible-core
+    echo "==> galaxy collections"
+    ansible-galaxy collection install -r requirements.yml --upgrade
+    ansible --version | head -1
+
 # Run molecule tests locally (requires docker daemon + `uv sync --group dev`)
 test role="":
     #!/usr/bin/env bash

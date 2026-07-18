@@ -1,5 +1,9 @@
 ---
 collections:
   - name: community.postgresql
+    version: ">=4.2.0"
   - name: community.general
+    version: ">=13.0.0"
+  # >=2.2.0: authorized_key drops the deprecated ansible.module_utils._text import
   - name: ansible.posix
+    version: ">=2.2.0"
