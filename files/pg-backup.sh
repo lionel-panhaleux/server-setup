@@ -53,7 +53,10 @@ restic_push() {
         notify "$name" "restic backup FAILED"
         return 1
     fi
-    if ! /usr/bin/restic forget \
+    # --group-by host: dump filenames carry their timestamp, so restic's
+    # default host,paths grouping would make every snapshot a group of one —
+    # its own newest daily/weekly/monthly, kept forever whatever the policy.
+    if ! /usr/bin/restic forget --group-by host \
            --keep-daily "$REMOTE_KEEP_DAILY" \
            --keep-weekly "$REMOTE_KEEP_WEEKLY" \
            --keep-monthly "$REMOTE_KEEP_MONTHLY" --prune; then
