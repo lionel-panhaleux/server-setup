@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.8
+
+- `nginx_site`: the certbot task reports what certbot did. It carried no
+  `changed_when`, so it counted as a change whenever its guard let it run and
+  reloaded nginx even when certbot had found the cert already covering the
+  names and not due, and said so. That was also the tree's last `no-changed-when`
+  violation: `ansible-lint` passes the production profile again.
+
 ## 1.0.7
 
 - `nginx_site`: run the nginx version detection under `--check` too. It is a
