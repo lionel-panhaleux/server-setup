@@ -40,3 +40,22 @@
           - _conf | regex_findall('location / \{') | length == 2  # one per server (80 redirect + 443)
       vars:
         _conf: "{{ mol_api_conf.content | b64decode }}"
+
+# A consuming play must survive `--check`. `nginx -v` is a command, which ansible
+# skips under check mode unless the task opts out, and the empty register used to
+# kill the play at the version parse — before anything was ever diffed. Dry-run the
+# whole role over an already-converged site: it has to reach the end.
+- name: Verify nginx_site survives a dry run
+  hosts: all
+  gather_facts: false
+  become: true
+  check_mode: true
+  tasks:
+    - name: Deploy the proxy site again, dry
+      ansible.builtin.include_role:
+        name: nginx_site
+      vars:
+        nginx_site_name: mol_proxy
+        nginx_site_domain: proxy.molecule.test
+        nginx_site_type: proxy
+        nginx_site_upstream: "http://127.0.0.1:8000"

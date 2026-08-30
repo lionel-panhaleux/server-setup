@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.7
+
+- `nginx_site`: run the nginx version detection under `--check` too. It is a
+  `command`, which ansible skips in check mode, so the register came back empty
+  and the version parse aborted every consuming play's dry run — before the
+  vhost was ever diffed, leaving a full deploy to apply the role unreviewed.
+  `nginx -v` changes nothing, so it now opts out of check mode.
+- molecule: the nginx_site scenario dry-runs the role over the converged site,
+  so a task that cannot survive `--check` fails CI rather than a consumer.
+
 ## 1.0.6
 
 - `nginx_site`: support nginx < 1.25.1 (Debian 12 ships 1.22): `http2 on;`
