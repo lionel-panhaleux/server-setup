@@ -28,6 +28,7 @@ build_ignore:
   - .claude
   - .github
   - .gitignore
+  - OPERATIONS.md
   - .pre-commit-config.yaml
   - .ansible-lint
   - .yamllint
