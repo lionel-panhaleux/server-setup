@@ -18,7 +18,7 @@ The migration direction is per-app `ansible/` (or `deploy/`) directories,
 consuming the collection where they need its roles — a bot with no database and
 no vhost needs none, only this repo's foundation (Alloy ships its journal to
 Loki whatever the unit). `krcg-bot`, `timer`, `rulings-website`, `archon-vibe`,
-`krcg-api`, `codex-of-the-damned` and `warroom-app` have all made the move; each
+`krcg-api`, `codex-of-the-damned`, `warroom-app` and `vtes-lackeyccg` have all made the move; each
 playbook was deleted from `myserver` only after the new deploy was verified
 running on the host. A playbook still in `myserver` is one not yet migrated.
 
@@ -26,11 +26,14 @@ running on the host. A playbook still in `myserver` is one not yet migrated.
 
 | Playbook | Group | Host |
 |---|---|---|
-| `krcg-static.yml`, `lackey-static.yml` | `krcg_sbg` | strasbourg |
+| `krcg-static.yml` | `krcg_sbg` | strasbourg |
 | `add-pubkey.yml`, `initial.yml`, `setup.yml` | `all` | — |
 
-For the two strasbourg sites, GitHub Actions rsyncs the *content*, but the nginx
-vhost and the certificate still come from `myserver`. In `sites-enabled` the two
+For `static.krcg.org`, GitHub Actions rsyncs the *content*, but the nginx vhost
+and the certificate still come from `myserver`. `lackey.krcg.org` works the same
+way except that its vhost and certificate come from `vtes-lackeyccg/ansible/`: its
+content still arrives by rsync as `lpanhaleux` into
+`/home/lpanhaleux/projects/lackey.krcg.org/dist`. In `sites-enabled` the two
 generations are easy to tell apart: `myserver` writes **plain files** named
 `<domain>.http.conf` / `<domain>.https.conf`; the collection writes **symlinks**
 named `<site_name>.conf`.
@@ -101,8 +104,8 @@ The migrating deploy must **delete the `myserver` vhost files before the role
 runs**: while they still answer for the domain on port 80, the re-issue's
 challenge 404s behind them (and counts against Let's Encrypt's failed-validation
 limit). `warroom-app/ansible/deploy.yml` is the worked example — and its first
-run is how `warroom.krcg.org` went through the repair. When `static` or `lackey`
-move off `myserver`, do the same.
+run is how `warroom.krcg.org` went through the repair, as `lackey.krcg.org` did
+after it. When `static` moves off `myserver`, do the same.
 
 ## Backup layout (restic)
 
@@ -169,7 +172,8 @@ Nothing outstanding.
 appearing there is a leftover, not a deployment.
 
 On strasbourg the same directory holds exactly `lackey.krcg.org` and
-`static.krcg.org` — the two sites still deployed from `myserver`. `warroom.krcg.org`
+`static.krcg.org`, the two sites whose content GitHub Actions rsyncs there; only
+`static.krcg.org`'s vhost still comes from `myserver`. `warroom.krcg.org`
 is served from `/var/www/warroom` by `warroom-app`'s own deploy, which removed its
 old directory and vhosts. The uWSGI-era `api.krcg.org` and Codex units, vhosts and
 project directories are gone, and so are the two round-robin ACME stubs
