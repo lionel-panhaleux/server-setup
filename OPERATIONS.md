@@ -14,8 +14,10 @@ Two ansible repos deploy to these hosts:
 - **`myserver`** — a **legacy repo that still owns live deployments**. Do not
   conclude a service is undeployed because it is absent from this repo.
 
-The migration direction is per-app `ansible/` directories that consume the
-collection. `krcg-bot`, `rulings-website` and `archon-vibe` have all made the
+The migration direction is per-app `ansible/` directories, consuming the
+collection where they need its roles — a bot with no database and no vhost needs
+none, only this repo's foundation (Alloy ships its journal to Loki whatever the
+unit). `krcg-bot`, `timer`, `rulings-website` and `archon-vibe` have all made the
 move; each playbook was deleted from `myserver` only after the new deploy was
 verified running on the host. A playbook still in `myserver` is one not yet
 migrated.
@@ -24,7 +26,6 @@ migrated.
 
 | Playbook | Group | Host |
 |---|---|---|
-| `timer-bot.yml` | `krcg_gra` | gravelines |
 | `codex.yml`, `codex-beta.yml`, `krcg-api.yml`, `krcg-static.yml`, `lackey-static.yml`, `warroom.yml` | `krcg_sbg` | strasbourg |
 | `add-pubkey.yml`, `initial.yml`, `setup.yml` | `all` | — |
 
@@ -35,33 +36,24 @@ Its group names differ from this repo's inventory hostnames:
 
 | `myserver` group | here | IP | |
 |---|---|---|---|
-| `krcg_gra` | gravelines | 152.228.170.51 | |
+| `krcg_gra` | gravelines | 152.228.170.51 | **vestigial** |
 | `krcg_sbg` | strasbourg | 51.178.45.139 | |
 | `krcg_lim` | frankfurt | 57.129.110.107 | **vestigial** |
 
-`krcg_lim` is still declared in `myserver/hosts.ini` but **no playbook targets it
-any more**. An unused inventory group reads exactly like a live one, so check for
+`krcg_gra` and `krcg_lim` are still declared in `myserver/hosts.ini` but **no
+playbook targets them any more** — gravelines lost its last one when `timer`
+moved. An unused inventory group reads exactly like a live one, so check for
 a playbook before assuming it deploys something.
 
 It was once `krcg_mun` — the group was renamed, the host did not change. When
 reading `myserver` git history, a playbook "moving hosts" may be a rename or a
 real move; check the IP.
 
-## What the legacy `python-worker` deploys look like on the host
+## What legacy `myserver` roles left on the hosts
 
-Anything still deployed from `myserver` follows this shape, and it differs from
-the collection's conventions in ways that matter:
-
-- venv at `/home/lpanhaleux/projects/<app>`, unit at
-  `/etc/systemd/system/<app>.service`, `User=lpanhaleux`, package installed from
-  **PyPI** (not a shipped wheel).
-- **Secrets are inline `Environment=` lines.** The unit file is a cleartext
-  credential store readable by anyone who can run `systemctl cat`. Deleting the
-  unit *is* the secret cleanup; rotating means editing the vault and re-running.
-- `ExecStart` is `/bin/bash -c 'source venv/bin/activate && <cmd>'`, so **journald
-  files these under `SYSLOG_IDENTIFIER=bash`, not the app name**. `journalctl -t
-  <app>` returns nothing and reads as "no logs". Use `-u <app>.service`, and key
-  Grafana queries on `unit=`, never `tag=`.
+- The `python-worker` role — venv under `/home/lpanhaleux/projects/<app>`, the
+  token inline in the unit, logs under `SYSLOG_IDENTIFIER=bash` — **is gone**; it
+  went with `timer-bot.yml`, the last playbook to use it.
 - The legacy `postgresql-database` role added a `local <db> <user> scram-sha-256`
   line to `pg_hba.conf` per (user, database) pair — so one role could appear on
   several lines. **That role no longer exists in `myserver`** (it went with the
@@ -126,9 +118,7 @@ today only because the token has never been rotated.
 
 ## Known, not yet done
 
-Nothing outstanding.
-
-`/home/lpanhaleux/projects/` on gravelines now holds exactly `timer-bot` — the
-only app still deployed there from `myserver`, and the last `python-worker` on
-the fleet. Anything else appearing in that directory is a leftover, not a
-deployment.
+- **`/home/lpanhaleux/projects/timer-bot` on gravelines is a leftover**, the last
+  `python-worker` venv. `timer-bot.service` now runs from `/opt/timer-bot` (the
+  `timer` repo's play), so nothing runs from it: delete it, and the directory is
+  empty.
