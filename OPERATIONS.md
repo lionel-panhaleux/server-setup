@@ -118,7 +118,8 @@ today only because the token has never been rotated.
 
 ## Known, not yet done
 
-- **`/home/lpanhaleux/projects/timer-bot` on gravelines is a leftover**, the last
-  `python-worker` venv. `timer-bot.service` now runs from `/opt/timer-bot` (the
-  `timer` repo's play), so nothing runs from it: delete it, and the directory is
-  empty.
+Nothing outstanding.
+
+`/home/lpanhaleux/projects/` on gravelines is empty: the last `python-worker` venv
+(`timer-bot`) was deleted after `timer` moved to `/opt/timer-bot`. Anything
+appearing there is a leftover, not a deployment.
