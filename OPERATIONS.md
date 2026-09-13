@@ -104,8 +104,20 @@ bucket.
    `select * from pg_hba_file_rules where error is not null` **before**
    `pg_reload_conf()`.
 
+## `backup: true` leaves cleartext copies of secrets
+
+Ansible's `backup: true` keeps the *old* file, so on any task that writes a
+secret it quietly produces a second copy of that secret, at the copy's default
+mode rather than the careful one.
+
+- `krcg-bot/ansible/deploy.yml` sets it on both the unit template and the token
+  file. That is deliberate and commented — on the first converge the pre-existing
+  hand-made unit held the only copy of the token — but the consequence outlives
+  the reason.
+- `/etc/krcg-bot/env` is `0640 root:krcg-bot`; a `…~` backup beside it is not.
+  The directory is clean today **only because the token has never been rotated**.
+  Check it after any rotation.
+
 ## Known, not yet done
 
-- **`/etc/systemd/system/krcg-bot.service.<pid>.<timestamp>~` on gravelines** is a
-  template backup of the old hand-made unit and carries a Discord token inline.
-  Its ansible deploy is stable now, so the file can go.
+Nothing outstanding.
