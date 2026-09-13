@@ -59,3 +59,55 @@
         nginx_site_domain: proxy.molecule.test
         nginx_site_type: proxy
         nginx_site_upstream: "http://127.0.0.1:8000"
+
+    # proxy.molecule.test carries the renewal conf certbot writes for this role's
+    # own webroot: nothing to repair. Under --check the SAN read is a skipped
+    # command, so the certbot task still builds its "would have run" command here;
+    # what must be absent from it is the repair flag.
+    - name: A renewal conf on this role's webroot is not forced to re-issue
+      ansible.builtin.assert:
+        that:
+          - not nginx_site_renewal_stale | bool
+          - "'--force-renewal' not in (nginx_site_certbot.cmd | default([]))"
+
+# The codex-beta case: a site moved onto this role from a deploy that served ACME
+# from /usr/share/nginx/html. Its cert covers every name and is valid, so nothing
+# looks wrong at deploy time — but certbot still writes renewal tokens where the
+# vhost no longer serves them, and the cert silently lapses.
+- name: Simulate a renewal conf inherited from an older deploy
+  hosts: all
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Point the proxy site's renewal conf at a legacy webroot
+      ansible.builtin.replace:
+        path: /etc/letsencrypt/renewal/proxy.molecule.test.conf
+        regexp: /var/www/certbot
+        replace: /usr/share/nginx/html
+
+- name: Verify nginx_site repairs a stale renewal webroot
+  hosts: all
+  gather_facts: false
+  become: true
+  check_mode: true
+  tasks:
+    - name: Deploy the proxy site again, dry
+      ansible.builtin.include_role:
+        name: nginx_site
+      vars:
+        nginx_site_name: mol_proxy
+        nginx_site_domain: proxy.molecule.test
+        nginx_site_type: proxy
+        nginx_site_upstream: "http://127.0.0.1:8000"
+
+    - name: The role re-issues through its own webroot, forced past "not due"
+      ansible.builtin.assert:
+        that:
+          - nginx_site_renewal_stale | bool
+          - nginx_site_certbot.cmd is defined
+          - "'/var/www/certbot' in nginx_site_certbot.cmd"
+          - "'--force-renewal' in nginx_site_certbot.cmd"
+        fail_msg: >-
+          A covered, valid cert whose renewal conf points at another webroot must
+          be re-issued with --force-renewal, or its renewals keep failing.
+          Got: {{ nginx_site_certbot }}

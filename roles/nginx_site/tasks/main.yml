@@ -82,14 +82,44 @@
   changed_when: false
   when: nginx_site_cert.stat.exists
 
-- name: Request Let's Encrypt certificate (issue, or expand for new aliases)
+# A cert can also cover every name and still be unable to renew. A site moved
+# here from another deploy keeps that deploy's renewal conf, and with it the
+# webroot certbot writes the challenge token to (e.g. /usr/share/nginx/html) —
+# while this role's vhost serves the challenge from /var/www/certbot. Nothing
+# fails at deploy time, the cert is valid; every unattended renewal then 404s
+# until it expires. A conf pointing elsewhere is re-issued through this webroot
+# below, which rewrites it. (No conf at all is not certbot's cert to repair.)
+- name: Read certificate renewal configuration
+  ansible.builtin.slurp:
+    src: "/etc/letsencrypt/renewal/{{ nginx_site_domain }}.conf"
+  register: nginx_site_renewal_conf
+  failed_when: false
+  when: nginx_site_cert.stat.exists
+
+- name: Check the renewal webroot is the one this vhost serves
+  ansible.builtin.set_fact:
+    nginx_site_renewal_stale: >-
+      {{ _conf | length > 0 and (
+           (_conf | regex_search('(?m)^authenticator\s*=\s*(\S+)', '\1')
+                  | default([''], true) | first) != 'webroot'
+           or (_webroots | reject('equalto', '/var/www/certbot') | list | length > 0)
+         ) }}
+  vars:
+    _conf: "{{ (nginx_site_renewal_conf.content | default('')) | b64decode }}"
+    # renewal reads the per-domain [[webroot_map]], the conf's last section
+    _webroots: >-
+      {{ (_conf.split('[[webroot_map]]') + [''])[1]
+         | regex_findall('(?m)^\S+\s*=\s*(\S+)\s*$') }}
+
+- name: Request Let's Encrypt certificate (issue, expand for new aliases, or repair renewal)
   ansible.builtin.command:
     cmd: >-
       certbot certonly --webroot -w /var/www/certbot
       --cert-name {{ nginx_site_domain }}
       -d {{ nginx_site_domain }}
       {% for a in nginx_site_aliases + nginx_site_cert_extra_domains %}-d {{ a }} {% endfor %}
-      --expand --non-interactive --agree-tos --register-unsafely-without-email
+      --expand {{ '--force-renewal' if nginx_site_renewal_stale | bool else '' }}
+      --non-interactive --agree-tos --register-unsafely-without-email
   vars:
     nginx_site_cert_covered: >-
       {{ (nginx_site_cert_sans.stdout | default(''))
@@ -97,12 +127,18 @@
   when: >-
     not nginx_site_cert.stat.exists or
     (([nginx_site_domain] + nginx_site_aliases + nginx_site_cert_extra_domains)
-     | difference(nginx_site_cert_covered) | length > 0)
+     | difference(nginx_site_cert_covered) | length > 0) or
+    nginx_site_renewal_stale | bool
   register: nginx_site_certbot
-  # The `when` above only lets this run when a name is missing from the cert, so
-  # it normally issues or expands one. certbot can still find nothing to do — a
-  # cert that covers the names and is not due — and says so rather than reissuing;
-  # take it at its word instead of reporting a change and reloading nginx for it.
+  # The `when` above lets this run to issue a cert, expand one missing a name, or
+  # repair a stale renewal conf. A repair is forced: the cert covers the names and
+  # is usually not due, so certbot would otherwise decline and leave the conf as
+  # it is. (`certbot reconfigure` would avoid the issuance, but only exists from
+  # certbot 2.3 and Debian 12 ships 2.1; the forced renewal is the documented way
+  # there, and it runs once — the rewritten conf no longer matches this check.)
+  # Otherwise certbot can still find nothing to do — a cert that covers the names
+  # and is not due — and says so rather than reissuing; take it at its word
+  # instead of reporting a change and reloading nginx for it.
   # (An empty stdout is the check-mode skip: a dry run reports the issuance it
   # would have performed.)
   changed_when: "'no action taken' not in (nginx_site_certbot.stdout | default('', true))"

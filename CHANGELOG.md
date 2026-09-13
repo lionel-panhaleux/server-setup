@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.0.9
+
+- `nginx_site`: repair a renewal configuration that points at another webroot.
+  A site moved onto the role while its certificate was still valid kept the
+  previous deploy's renewal conf, and with it that deploy's ACME webroot (e.g.
+  `/usr/share/nginx/html`), while the role's vhost serves the challenge from
+  `/var/www/certbot`. The certificate covered every name, so the role requested
+  nothing and every unattended renewal 404'd until it expired — which is how
+  `codex-beta.krcg.org` came within 18 days of lapsing. The role now reads the
+  renewal conf and re-issues through its own webroot with `--force-renewal`,
+  which rewrites the conf; it runs once per affected lineage. (`certbot
+  reconfigure` would avoid the issuance but needs certbot 2.3; Debian 12 ships
+  2.1.) A certificate with no renewal conf is left alone.
+- molecule: the nginx_site scenario gives the proxy site a certbot renewal conf,
+  checks the role leaves it alone, then points it at a legacy webroot and checks
+  a dry run would force the re-issue.
+
 ## 1.0.8
 
 - `nginx_site`: the certbot task reports what certbot did. It carried no

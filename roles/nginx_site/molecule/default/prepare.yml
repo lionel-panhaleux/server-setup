@@ -48,6 +48,37 @@
       loop_control:
         label: "{{ item.domain }}"
 
+    # A renewal conf the way certbot writes one for this role's own invocation,
+    # so the stale-webroot check is exercised against a certbot-managed cert
+    # (verify.yml later rewrites it to the legacy webroot and expects a repair).
+    - name: Create the certbot renewal directory
+      ansible.builtin.file:
+        path: /etc/letsencrypt/renewal
+        state: directory
+        mode: "0755"
+
+    - name: Write a certbot renewal conf for the proxy site
+      ansible.builtin.copy:
+        dest: /etc/letsencrypt/renewal/proxy.molecule.test.conf
+        content: |
+          version = 2.1.0
+          archive_dir = /etc/letsencrypt/archive/proxy.molecule.test
+          cert = /etc/letsencrypt/live/proxy.molecule.test/cert.pem
+          privkey = /etc/letsencrypt/live/proxy.molecule.test/privkey.pem
+          chain = /etc/letsencrypt/live/proxy.molecule.test/chain.pem
+          fullchain = /etc/letsencrypt/live/proxy.molecule.test/fullchain.pem
+
+          # Options used in the renewal process
+          [renewalparams]
+          account = 00000000000000000000000000000000
+          authenticator = webroot
+          webroot_path = /var/www/certbot,
+          server = https://acme-v02.api.letsencrypt.org/directory
+          [[webroot_map]]
+          proxy.molecule.test = /var/www/certbot
+        mode: "0644"
+        directory_mode: "0755"
+
     # No options-ssl-nginx.conf / ssl-dhparams.pem stubs here: the HTTPS vhost
     # inlines its SSL settings (certbot certonly --webroot never installs those
     # files), so the test runs under the same condition as real deploys.
