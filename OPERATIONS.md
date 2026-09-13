@@ -127,9 +127,8 @@ today only because the token has never been rotated.
 
 ## Known, not yet done
 
-- **`/home/lpanhaleux/projects/krcg-bot` on gravelines (Feb 2024)** looks like a
-  stale venv of the retired deploy — krcg-bot has run from its own `app_dir` as
-  `User=krcg-bot` since migrating. Confirm before deleting:
-  `systemctl cat krcg-bot | grep -E 'ExecStart|WorkingDirectory'`; if neither path
-  is under `/home/lpanhaleux/projects/`, it is dead. `timer-bot` and
-  `v2.api.krcg.org` beside it are live — they still deploy from `myserver`.
+Nothing outstanding.
+
+`/home/lpanhaleux/projects/` on gravelines now holds exactly `timer-bot` and
+`v2.api.krcg.org` — the two apps still deployed from `myserver`. Anything else
+appearing there is a leftover, not a deployment.
