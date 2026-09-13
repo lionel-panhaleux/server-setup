@@ -127,15 +127,6 @@ today only because the token has never been rotated.
 
 ## Known, not yet done
 
-- **`postgres_backup_exclude` in `inventory/host_vars/frankfurt.yml` is out of
-  date.** Two of its three names (`archondb`, `archon_legacy`) no longer exist on
-  that cluster — only `new_archon` and `postgres` do. Pruning those two is
-  cosmetic; the third needs a decision. `new_archon` is now 173 MB belonging to
-  the beta that *replaced* the legacy app on this host, but the comment still
-  justifies excluding it with "prod-side backups (vekn.net box) are the real
-  safety net" — which held while vekn prod ran the old `archon`. `archon-vibe`
-  serves vekn prod now too, so whether that safety net still covers beta is an
-  open question, not a given.
 - **`/home/lpanhaleux/projects/krcg-bot` on gravelines (Feb 2024)** looks like a
   stale venv of the retired deploy — krcg-bot has run from its own `app_dir` as
   `User=krcg-bot` since migrating. Confirm before deleting:
