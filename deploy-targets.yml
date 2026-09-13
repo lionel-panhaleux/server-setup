@@ -5,7 +5,6 @@ lionel-panhaleux/krcg-api: strasbourg
 lionel-panhaleux/warroom-app: strasbourg
 lionel-panhaleux/krcg-static: strasbourg
 lionel-panhaleux/krcg-bot: gravelines
-lionel-panhaleux/timer: gravelines
 lionel-panhaleux/codex-of-the-damned: strasbourg
 vtes-biased/archon-vibe: {host: frankfurt, env: beta}   # archon.krcg.org (beta)
 vtes-biased/rulings-website: gravelines
