@@ -74,6 +74,23 @@
           The dry run would have run certbot for a covered, current cert.
           Got: {{ nginx_site_certbot }}
 
+    # A site's first deploy is the dry run most worth reviewing, and the one where
+    # nothing exists yet: the config is not written, so the link has no target.
+    - name: Deploy a site never deployed before, dry
+      ansible.builtin.include_role:
+        name: nginx_site
+      vars:
+        nginx_site_name: mol_new
+        nginx_site_domain: new.molecule.test
+        nginx_site_type: spa
+        nginx_site_root: /srv/site-root
+
+    - name: The first-deploy dry run reaches the certificate request
+      ansible.builtin.assert:
+        that:
+          - nginx_site_certbot.cmd is defined
+        fail_msg: "Got: {{ nginx_site_certbot }}"
+
 # The codex-beta case: a site moved onto this role from a deploy that served ACME
 # from /usr/share/nginx/html. Its cert covers every name and is valid, so nothing
 # looks wrong at deploy time — but certbot still writes renewal tokens where the

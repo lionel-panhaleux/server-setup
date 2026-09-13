@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.0.11
+
+- `nginx_site`: a dry run of a site's first deploy reaches the end. Check mode
+  does not write the config, so enabling the site found no link target and
+  aborted the play — on exactly the deploy most worth reviewing
+  (`warroom.krcg.org`'s cutover from `myserver`). The link now uses `force`
+  when the config is not on disk, which only a dry run can see: check mode then
+  reports the link without creating it. The condition is a `stat`, not
+  `ansible_check_mode`, which follows the CLI `--check` but not a play's
+  `check_mode: true`.
+- molecule: the nginx_site scenario dry-runs a site that was never deployed.
+
 ## 1.0.10
 
 - `nginx_site`: read the certificate's names under `--check` too. The read is a

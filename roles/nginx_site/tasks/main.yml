@@ -60,11 +60,22 @@
     cert_exists: "{{ nginx_site_cert.stat.exists }}"
   notify: Reload nginx
 
+# On a site's first deploy a dry run has not written the config above, and the
+# link refuses a missing target. `force` lets check mode report the link it would
+# create (it never creates it there). A real run always has the file, so it keeps
+# refusing to replace, say, a regular file. (Not `ansible_check_mode`: that only
+# follows the CLI --check, never a play's `check_mode: true`.)
+- name: Check the site config is written
+  ansible.builtin.stat:
+    path: "/etc/nginx/sites-available/{{ nginx_site_name }}.conf"
+  register: nginx_site_available
+
 - name: Enable site
   ansible.builtin.file:
     src: "/etc/nginx/sites-available/{{ nginx_site_name }}.conf"
     dest: "/etc/nginx/sites-enabled/{{ nginx_site_name }}.conf"
     state: link
+    force: "{{ not nginx_site_available.stat.exists }}"
   notify: Reload nginx
 
 - name: Reload nginx before requesting certificate
