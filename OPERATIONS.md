@@ -104,19 +104,17 @@ bucket.
    `select * from pg_hba_file_rules where error is not null` **before**
    `pg_reload_conf()`.
 
-## `backup: true` leaves cleartext copies of secrets
+## `backup: true` keeps superseded secrets on disk
 
-Ansible's `backup: true` keeps the *old* file, so on any task that writes a
-secret it quietly produces a second copy of that secret, at the copy's default
-mode rather than the careful one.
+`krcg-bot/ansible/deploy.yml` sets `backup: true` on the token file, deliberately
+— on the first converge the hand-made unit held the only copy of that token.
 
-- `krcg-bot/ansible/deploy.yml` sets it on both the unit template and the token
-  file. That is deliberate and commented — on the first converge the pre-existing
-  hand-made unit held the only copy of the token — but the consequence outlives
-  the reason.
-- `/etc/krcg-bot/env` is `0640 root:krcg-bot`; a `…~` backup beside it is not.
-  The directory is clean today **only because the token has never been rotated**.
-  Check it after any rotation.
+The backup is **not** more exposed than the live file: `backup_local` copies via
+`preserved_copy`, which is `shutil.copy2` plus an explicit `chown`, so mode and
+owner carry over (and mtime, which is why a backup can look older than the
+converge that made it). The trap is lifecycle, not permissions — **a rotation is
+not finished until `/etc/krcg-bot/env.*~` is deleted.** That directory is clean
+today only because the token has never been rotated.
 
 ## Known, not yet done
 
