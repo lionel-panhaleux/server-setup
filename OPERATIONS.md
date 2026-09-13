@@ -15,31 +15,38 @@ Two ansible repos deploy to these hosts:
   conclude a service is undeployed because it is absent from this repo.
 
 The migration direction is per-app `ansible/` directories that consume the
-collection (`krcg-bot` is the model: it was retired from `myserver` once its own
-deploy converged). A playbook still in `myserver` is one not yet migrated.
+collection. `krcg-bot`, `rulings-website` and `archon-vibe` have all made the
+move; each playbook was deleted from `myserver` only after the new deploy was
+verified running on the host. A playbook still in `myserver` is one not yet
+migrated.
 
 ### What still deploys from `myserver`
 
 | Playbook | Group | Host |
 |---|---|---|
-| `krcg-rulings.yml` | `krcg_gra` | gravelines |
 | `v2-krcg-api.yml` | `krcg_gra` | gravelines |
 | `timer-bot.yml` | `krcg_gra` | gravelines |
-| `archon-website.yml` | `krcg_lim` | frankfurt |
 | `codex.yml`, `codex-beta.yml`, `krcg-api.yml`, `krcg-static.yml`, `lackey-static.yml`, `warroom.yml` | `krcg_sbg` | strasbourg |
 | `add-pubkey.yml`, `initial.yml`, `setup.yml` | `all` | — |
 
+**Frankfurt is no longer a `myserver` target at all** — everything on it comes
+from `archon-vibe`'s own deploy.
+
 Its group names differ from this repo's inventory hostnames:
 
-| `myserver` group | here | IP |
-|---|---|---|
-| `krcg_gra` | gravelines | 152.228.170.51 |
-| `krcg_sbg` | strasbourg | 51.178.45.139 |
-| `krcg_lim` | frankfurt | 57.129.110.107 |
+| `myserver` group | here | IP | |
+|---|---|---|---|
+| `krcg_gra` | gravelines | 152.228.170.51 | |
+| `krcg_sbg` | strasbourg | 51.178.45.139 | |
+| `krcg_lim` | frankfurt | 57.129.110.107 | **vestigial** |
 
-`krcg_lim` was once `krcg_mun` — the group was renamed, the host did not change.
-When reading its git history, a playbook "moving hosts" may be a rename or a real
-move; check the IP.
+`krcg_lim` is still declared in `myserver/hosts.ini` but **no playbook targets it
+any more**. An unused inventory group reads exactly like a live one, so check for
+a playbook before assuming it deploys something.
+
+It was once `krcg_mun` — the group was renamed, the host did not change. When
+reading `myserver` git history, a playbook "moving hosts" may be a rename or a
+real move; check the IP.
 
 ## What the legacy `python-worker` deploys look like on the host
 
@@ -56,9 +63,11 @@ the collection's conventions in ways that matter:
   files these under `SYSLOG_IDENTIFIER=bash`, not the app name**. `journalctl -t
   <app>` returns nothing and reads as "no logs". Use `-u <app>.service`, and key
   Grafana queries on `unit=`, never `tag=`.
-- The legacy `postgresql-database` role adds a `local <db> <user> scram-sha-256`
-  line to `pg_hba.conf` per (user, database) pair — so one role can appear on
-  several lines.
+- The legacy `postgresql-database` role added a `local <db> <user> scram-sha-256`
+  line to `pg_hba.conf` per (user, database) pair — so one role could appear on
+  several lines. **That role no longer exists in `myserver`** (it went with the
+  last two playbooks that used it), but the lines it wrote are still on the hosts:
+  nothing removes them when a database is dropped.
 
 ## Backup layout (restic)
 
