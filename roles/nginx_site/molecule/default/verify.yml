@@ -15,6 +15,7 @@
       register: site_stat
       loop:
         - mol_static
+        - mol_plain
         - mol_spa
         - mol_proxy
         - mol_api
@@ -40,6 +41,34 @@
           - _conf | regex_findall('location / \{') | length == 2  # one per server (80 redirect + 443)
       vars:
         _conf: "{{ mol_api_conf.content | b64decode }}"
+
+    - name: Read the plain-HTTP site config
+      ansible.builtin.slurp:
+        src: /etc/nginx/sites-available/mol_plain.conf
+      register: mol_plain_conf
+
+    - name: A whole-site plain-HTTP path replaces the redirect
+      ansible.builtin.assert:
+        that:
+          - "'return 301' not in _conf"
+          - _conf | regex_findall('location / \{') | length == 2  # one per server (80 plain + 443)
+      vars:
+        _conf: "{{ mol_plain_conf.content | b64decode }}"
+
+    - name: Request the plain-HTTP site over port 80
+      ansible.builtin.uri:
+        url: http://127.0.0.1/
+        headers:
+          Host: plain.molecule.test
+        follow_redirects: none
+        return_content: true
+      register: mol_plain_http
+
+    - name: Port 80 serves the content, not a redirect
+      ansible.builtin.assert:
+        that:
+          - mol_plain_http.status == 200
+          - "'ok' in mol_plain_http.content"
 
 # A consuming play must survive `--check`. `nginx -v` is a command, which ansible
 # skips under check mode unless the task opts out, and the empty register used to

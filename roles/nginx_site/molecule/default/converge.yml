@@ -25,6 +25,16 @@
         nginx_site_type: static
         nginx_site_root: /srv/site-root
 
+    - name: Deploy a static site served over plain HTTP too
+      ansible.builtin.include_role:
+        name: nginx_site
+      vars:
+        nginx_site_name: mol_plain
+        nginx_site_domain: plain.molecule.test
+        nginx_site_type: static
+        nginx_site_root: /srv/site-root
+        nginx_site_plain_http_paths: ["/"]
+
     - name: Deploy an SPA site
       ansible.builtin.include_role:
         name: nginx_site

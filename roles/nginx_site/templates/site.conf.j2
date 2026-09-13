@@ -48,6 +48,8 @@ server {
     }
 {% endfor %}
 
+{# "/" in nginx_site_plain_http_paths already emitted the root location above #}
+{% if "/" not in nginx_site_plain_http_paths %}
 {% if cert_exists %}
     location / {
         return 301 https://$host$request_uri;
@@ -56,6 +58,7 @@ server {
     location / {
         return 503 "TLS certificate not yet provisioned\n";
     }
+{% endif %}
 {% endif %}
 }
 

@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.12
+
+- `nginx_site`: `nginx_site_plain_http_paths: ["/"]` serves the whole site over
+  plain HTTP. The port 80 server still added its own `location /` (the HTTPS
+  redirect, or the 503 before the certificate exists), and nginx refuses a
+  duplicate location, so the config failed `nginx -t`. The catch-all is now left
+  out when `/` is a plain-HTTP path, as the HTTPS server already does for
+  `nginx_site_open_api_paths: ["/"]`. For `lackey.krcg.org`, whose LackeyCCG
+  clients fetch the plugin files.
+- molecule: a static site served over plain HTTP answers 200 on port 80.
+
 ## 1.0.11
 
 - `nginx_site`: a dry run of a site's first deploy reaches the end. Check mode

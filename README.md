@@ -151,7 +151,7 @@ Consumer playbook (proxy example):
 
 `nginx_site_name` defaults to `service_name` — set the latter once at the play level and it flows to the postgres_db role too. Override `nginx_site_name` explicitly only when the site and DB identifiers differ.
 
-Static site: set `nginx_site_type: static` and `nginx_site_root: /var/www/codex`. SPA: `nginx_site_type: spa` and `nginx_site_root: /var/www/warroom`.
+Static site: set `nginx_site_type: static` and `nginx_site_root: /var/www/codex`. SPA: `nginx_site_type: spa` and `nginx_site_root: /var/www/warroom`. `nginx_site_plain_http_paths: ["/"]` serves the whole site over plain HTTP as well as HTTPS.
 
 All requests for a site are logged to journald under the tag `nginx_<nginx_site_name>`:
 
