@@ -60,15 +60,19 @@
         nginx_site_type: proxy
         nginx_site_upstream: "http://127.0.0.1:8000"
 
-    # proxy.molecule.test carries the renewal conf certbot writes for this role's
-    # own webroot: nothing to repair. Under --check the SAN read is a skipped
-    # command, so the certbot task still builds its "would have run" command here;
-    # what must be absent from it is the repair flag.
-    - name: A renewal conf on this role's webroot is not forced to re-issue
+    # proxy.molecule.test is covered, current, and carries the renewal conf certbot
+    # writes for this role's own webroot: nothing to issue, expand or repair, so a
+    # dry run must not report certbot at all. A task skipped by its condition never
+    # builds `cmd`; check mode's own "would have run" skip does — which is what
+    # every dry run used to report, when the SAN read was skipped under --check.
+    - name: A covered cert on this role's webroot reports no certbot run
       ansible.builtin.assert:
         that:
           - not nginx_site_renewal_stale | bool
-          - "'--force-renewal' not in (nginx_site_certbot.cmd | default([]))"
+          - nginx_site_certbot.cmd is not defined
+        fail_msg: >-
+          The dry run would have run certbot for a covered, current cert.
+          Got: {{ nginx_site_certbot }}
 
 # The codex-beta case: a site moved onto this role from a deploy that served ACME
 # from /usr/share/nginx/html. Its cert covers every name and is valid, so nothing

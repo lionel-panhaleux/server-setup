@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.10
+
+- `nginx_site`: read the certificate's names under `--check` too. The read is a
+  `command`, which ansible skips in check mode, so it registered nothing, every
+  name looked missing, and every dry run of every site reported a certbot
+  issuance a real run would not perform — burying the one site that genuinely
+  needed a certificate among all the ones that did not. `openssl x509` only
+  reads, so it now opts out of check mode, as `nginx -v` did in 1.0.7.
+- molecule: the dry run over the converged proxy site asserts certbot is not
+  reported at all, not merely that it is not forced.
+
 ## 1.0.9
 
 - `nginx_site`: repair a renewal configuration that points at another webroot.

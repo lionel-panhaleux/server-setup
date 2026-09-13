@@ -73,6 +73,9 @@
 # A cert can exist but predate an alias change (e.g. an apex domain moved to
 # this site as an alias): compare its SANs to the desired domain set and
 # re-issue with --expand when any name is missing.
+# `openssl x509` only reads the cert, so it runs under --check as well: skipped
+# there, it registered no SANs, every name looked missing, and every dry run of
+# every site reported a certbot issuance that a real run would not perform.
 - name: Read certificate domain coverage
   ansible.builtin.command:
     cmd: >-
@@ -80,6 +83,7 @@
       -in /etc/letsencrypt/live/{{ nginx_site_domain }}/fullchain.pem
   register: nginx_site_cert_sans
   changed_when: false
+  check_mode: false
   when: nginx_site_cert.stat.exists
 
 # A cert can also cover every name and still be unable to renew. A site moved
