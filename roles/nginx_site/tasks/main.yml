@@ -9,6 +9,15 @@
       - (nginx_site_type == "proxy") or (nginx_site_root | length > 0)
     fail_msg: "nginx_site_name, nginx_site_domain, nginx_site_type and its companion (nginx_site_root or nginx_site_upstream) are required"
 
+# A public site already serves everything on port 80: a plain-HTTP prefix would
+# only add a second, bare location beside it.
+- name: Validate public site inputs
+  ansible.builtin.assert:
+    that:
+      - not (nginx_site_public | bool) or nginx_site_type in ["static", "spa"]
+      - not (nginx_site_public | bool) or nginx_site_plain_http_paths | length == 0
+    fail_msg: "nginx_site_public serves files (static or spa) on both ports, and takes no nginx_site_plain_http_paths"
+
 # nginx_site_name becomes a syslog tag (templates/site.conf.j2) — nginx rejects
 # anything other than alphanumeric + underscore with a cryptic parse error.
 - name: Validate nginx_site_name charset

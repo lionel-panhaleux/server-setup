@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.0.13
+
+- `nginx_site`: `nginx_site_public: true` (static and spa) serves public files
+  anyone may link to: read-only CORS on every response, errors included, with
+  preflights answered 204; directory listings; and port 80 serving the site
+  exactly as 443 does, `nginx_site_extra_locations` included, instead of
+  redirecting. For `static.krcg.org` and `lackey.krcg.org`, which kept all of
+  this in hand-written snippets, and whose whole-site plain-HTTP path served
+  port 80 bare (no headers, no rewrites, no listings).
+- `nginx_site`: cache defaults per type. `static` sends
+  `public, must-revalidate` with `max-age=3600` for images and fonts and
+  `max-age=300` for everything else. `spa` caches `/assets/` (where Vite puts
+  the hashed files) for a year as immutable and everything else `no-cache`: it
+  used to cache every `.js` for a year, service worker and its registration
+  script included, so `warroom.krcg.org` had to exempt them one by one.
+- `nginx_site`: static and spa sites declare `charset utf-8` on text responses.
+  Without it a browser guesses the encoding of a `.txt` file, and misreads the
+  accented names in `static.krcg.org`'s tournament reports.
+- molecule: a public static site answers on port 80 with CORS, listings, cache
+  headers and its extra locations; an SPA caches only its assets.
+
 ## 1.0.12
 
 - `nginx_site`: `nginx_site_plain_http_paths: ["/"]` serves the whole site over

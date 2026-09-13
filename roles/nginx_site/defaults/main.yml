@@ -20,5 +20,9 @@ nginx_site_open_api_paths: []           # path prefixes that get permissive CORS
 nginx_site_cert_extra_domains: []       # extra SANs on the cert (e.g. a domain that will move here as an alias later)
 nginx_site_plain_http_paths: []         # path prefixes served over plain HTTP (no HTTPS redirect; ["/"] = whole site)
 nginx_site_client_max_body_size: "10m"
-nginx_site_extra_locations: ""          # raw nginx snippet appended to the HTTPS server
+nginx_site_extra_locations: ""          # raw nginx snippet appended to the HTTPS server (to both servers when public)
+# static | spa: public files anyone may link to — read-only CORS on every response,
+# directory listings, and port 80 serving the site just as 443 does (no redirect).
+# An extra location that sets its own add_header must repeat the CORS headers.
+nginx_site_public: false
 nginx_site_log_tag: "{{ nginx_site_name }}"   # journalctl -t <this> filters this site's nginx logs

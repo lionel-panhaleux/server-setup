@@ -16,6 +16,7 @@
       loop:
         - mol_static
         - mol_plain
+        - mol_public
         - mol_spa
         - mol_proxy
         - mol_api
@@ -69,6 +70,67 @@
         that:
           - mol_plain_http.status == 200
           - "'ok' in mol_plain_http.content"
+
+    # Only port 80 can be requested here (the test certs don't match 127.0.0.1),
+    # and a public site renders the same content into both servers.
+    - name: Request the public site over port 80
+      ansible.builtin.uri:
+        url: "http://127.0.0.1{{ item.path }}"
+        method: "{{ item.method | default('GET') }}"
+        headers:
+          Host: public.molecule.test
+        follow_redirects: none
+        return_content: true
+        status_code: "{{ item.status }}"
+      loop:
+        - {path: /, status: 200, body: ok, cache: "public, must-revalidate, max-age=300", type: "text/html; charset=utf-8"}
+        - {path: /files/, status: 200, body: pic.png}  # a directory listing
+        # the extra_locations rewrite, on port 80 as well
+        - {path: /bust/123/files/pic.png, status: 200, cache: "public, must-revalidate, max-age=3600"}
+        - {path: /missing, status: 404}
+        - {path: /, method: OPTIONS, status: 204}
+      register: mol_public_http
+
+    - name: Port 80 serves the public site, with CORS on every response
+      ansible.builtin.assert:
+        that:
+          - item.access_control_allow_origin | default('') == '*'
+          - item.item.cache is not defined or item.cache_control | default('') == item.item.cache
+          - item.item.body is not defined or item.item.body in item.content
+          - item.item.type is not defined or item.content_type | default('') == item.item.type
+      loop: "{{ mol_public_http.results }}"
+      loop_control:
+        label: "{{ item.item.method | default('GET') }} {{ item.item.path }}"
+
+    - name: Read the public site config
+      ansible.builtin.slurp:
+        src: /etc/nginx/sites-available/mol_public.conf
+      register: mol_public_conf
+
+    - name: The HTTPS server serves the public site the same way
+      ansible.builtin.assert:
+        that:
+          - "'return 301' not in _conf"
+          - "'autoindex on' in _https"
+          - "'GET, HEAD, OPTIONS' in _https"
+          - "'rewrite ^/bust/' in _https"
+      vars:
+        _conf: "{{ mol_public_conf.content | b64decode }}"
+        _https: "{{ _conf.split('listen 443')[1] }}"
+
+    - name: Read the SPA site config
+      ansible.builtin.slurp:
+        src: /etc/nginx/sites-available/mol_spa.conf
+      register: mol_spa_conf
+
+    - name: An SPA caches only its hashed assets, and a private site sends no CORS
+      ansible.builtin.assert:
+        that:
+          - _conf is search('location /assets/ \{[^}]*immutable')
+          - _conf is search('location / \{[^}]*no-cache')
+          - "'Access-Control' not in _conf"
+      vars:
+        _conf: "{{ mol_spa_conf.content | b64decode }}"
 
 # A consuming play must survive `--check`. `nginx -v` is a command, which ansible
 # skips under check mode unless the task opts out, and the empty register used to

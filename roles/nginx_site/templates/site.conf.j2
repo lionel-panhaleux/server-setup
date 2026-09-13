@@ -1,5 +1,6 @@
 {% set server_names = [nginx_site_domain] + nginx_site_aliases %}
 {% set log_tag = nginx_site_log_tag %}
+{% set public = nginx_site_public | bool %}
 {% macro log_directives() -%}
     access_log syslog:server=unix:/dev/log,tag={{ log_tag }},nohostname combined;
     error_log  syslog:server=unix:/dev/log,tag={{ log_tag }},nohostname warn;
@@ -11,6 +12,21 @@
         add_header Access-Control-Max-Age       "86400" always;
         if ($request_method = OPTIONS) { return 204; }
 {%- endmacro %}
+{% macro public_cors(pad="        ") %}
+{{ pad }}add_header Access-Control-Allow-Origin  "*" always;
+{{ pad }}add_header Access-Control-Allow-Methods "GET, HEAD, OPTIONS" always;
+{{ pad }}add_header Access-Control-Allow-Headers "*" always;
+{{ pad }}add_header Access-Control-Max-Age       "86400" always;
+{%- endmacro %}
+{# add_header is all-or-nothing per level: a location that sets Cache-Control
+   inherits no header from its server, so a public site's CORS goes along #}
+{% macro cache_control(value) %}
+        add_header Cache-Control "{{ value }}";
+{%- if public %}
+
+{{ public_cors() }}
+{%- endif %}
+{%- endmacro %}
 {% macro proxy_block() -%}
         proxy_pass {{ nginx_site_upstream }};
         proxy_http_version 1.1;
@@ -21,6 +37,72 @@
         proxy_set_header Upgrade           $http_upgrade;
         proxy_set_header Connection        $connection_upgrade;
         proxy_read_timeout 60s;
+{%- endmacro %}
+{% macro site_content() %}
+{% for path in nginx_site_open_api_paths %}
+    location {{ path }} {
+{{ cors_block() }}
+{% if nginx_site_type == "proxy" %}
+{{ proxy_block() }}
+{% else %}
+        root {{ nginx_site_root }};
+        try_files $uri $uri/ =404;
+{% endif %}
+    }
+{% endfor %}
+
+{% if public %}
+    # public files: read-only CORS on every response, errors included, and listings
+{{ public_cors("    ") }}
+    if ($request_method = OPTIONS) {
+        return 204;
+    }
+    autoindex on;
+    autoindex_exact_size off;
+
+{% endif %}
+{% if nginx_site_type == "static" %}
+    root {{ nginx_site_root }};
+    index index.html;
+    charset utf-8;
+
+    # file names don't change with their content: short lifetimes,
+    # a little longer for images and fonts
+    location ~* \.(?:jpg|jpeg|png|gif|svg|webp|avif|ico|woff2?|ttf|otf)$ {
+{{ cache_control("public, must-revalidate, max-age=3600") }}
+        try_files $uri =404;
+    }
+
+    location / {
+{{ cache_control("public, must-revalidate, max-age=300") }}
+        try_files $uri $uri/ =404;
+    }
+{% elif nginx_site_type == "spa" %}
+    root {{ nginx_site_root }};
+    index index.html;
+    charset utf-8;
+
+    # the build's hashed assets never change under their name
+    location /assets/ {
+{{ cache_control("public, max-age=31536000, immutable") }}
+        try_files $uri =404;
+    }
+
+    # the shell, the service worker and the icons keep their names across builds
+    location / {
+{{ cache_control("no-cache") }}
+        try_files $uri $uri/ /index.html;
+    }
+{% elif nginx_site_type == "proxy" %}
+{# "/" in nginx_site_open_api_paths already emitted the root location (with CORS) above #}
+{% if "/" not in nginx_site_open_api_paths %}
+    location / {
+{{ proxy_block() }}
+    }
+{% endif %}
+{% endif %}
+
+{{ nginx_site_extra_locations }}
 {%- endmacro %}
 
 # {{ nginx_site_name }} — managed by server-setup/nginx_site
@@ -37,6 +119,10 @@ server {
         root /var/www/certbot;
     }
 
+{% if public %}
+{# a public site serves port 80 exactly as it serves 443, without redirecting #}
+{{ site_content() }}
+{% else %}
 {% for path in nginx_site_plain_http_paths %}
     location {{ path }} {
 {% if nginx_site_type == "proxy" %}
@@ -58,6 +144,7 @@ server {
     location / {
         return 503 "TLS certificate not yet provisioned\n";
     }
+{% endif %}
 {% endif %}
 {% endif %}
 }
@@ -90,48 +177,6 @@ server {
 {{ log_directives() }}
     client_max_body_size {{ nginx_site_client_max_body_size }};
 
-{% for path in nginx_site_open_api_paths %}
-    location {{ path }} {
-{{ cors_block() }}
-{% if nginx_site_type == "proxy" %}
-{{ proxy_block() }}
-{% else %}
-        root {{ nginx_site_root }};
-        try_files $uri $uri/ =404;
-{% endif %}
-    }
-{% endfor %}
-
-{% if nginx_site_type == "static" %}
-    root {{ nginx_site_root }};
-    index index.html;
-
-    location / {
-        try_files $uri $uri/ =404;
-    }
-{% elif nginx_site_type == "spa" %}
-    root {{ nginx_site_root }};
-    index index.html;
-
-    # Long-cache hashed build assets
-    location ~* \.(?:js|css|woff2?|png|jpg|jpeg|gif|svg|webp|ico)$ {
-        expires 1y;
-        add_header Cache-Control "public, immutable";
-        try_files $uri =404;
-    }
-
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-{% elif nginx_site_type == "proxy" %}
-{# "/" in nginx_site_open_api_paths already emitted the root location (with CORS) above #}
-{% if "/" not in nginx_site_open_api_paths %}
-    location / {
-{{ proxy_block() }}
-    }
-{% endif %}
-{% endif %}
-
-{{ nginx_site_extra_locations }}
+{{ site_content() }}
 }
 {% endif %}

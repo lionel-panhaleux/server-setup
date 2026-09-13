@@ -6,6 +6,7 @@
     _test_domains:
       - domain: static.molecule.test
       - domain: plain.molecule.test
+      - domain: public.molecule.test
       - domain: spa.molecule.test
       - domain: proxy.molecule.test
       - domain: api.molecule.test

@@ -16,6 +16,20 @@
         dest: /srv/site-root/index.html
         mode: "0644"
 
+    - name: Create a directory to list and a build's assets directory
+      ansible.builtin.file:
+        path: "/srv/site-root/{{ item }}"
+        state: directory
+        mode: "0755"
+      loop: [files, assets]
+
+    - name: Write placeholder files in them
+      ansible.builtin.copy:
+        content: "placeholder"
+        dest: "/srv/site-root/{{ item }}"
+        mode: "0644"
+      loop: [files/pic.png, assets/app.js]
+
     - name: Deploy a static site
       ansible.builtin.include_role:
         name: nginx_site
@@ -34,6 +48,19 @@
         nginx_site_type: static
         nginx_site_root: /srv/site-root
         nginx_site_plain_http_paths: ["/"]
+
+    - name: Deploy a public static site
+      ansible.builtin.include_role:
+        name: nginx_site
+      vars:
+        nginx_site_name: mol_public
+        nginx_site_domain: public.molecule.test
+        nginx_site_type: static
+        nginx_site_root: /srv/site-root
+        nginx_site_public: true
+        # must reach port 80 too
+        nginx_site_extra_locations: |
+          rewrite ^/bust/\d+/(.*)$ /$1 last;
 
     - name: Deploy an SPA site
       ansible.builtin.include_role:

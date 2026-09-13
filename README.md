@@ -118,8 +118,8 @@ The `setup.yml` and `upgrade.yml` workflows run via `workflow_dispatch` and take
 
 Deploys an nginx site with automatic Let's Encrypt issuance and journald logging. Supports three modes:
 
-- `static` — serve files from a directory
-- `spa` — static with `index.html` fallback + long-cache for hashed assets (Vite/TS PWAs)
+- `static` — serve files from a directory (cached 5 minutes, images and fonts an hour)
+- `spa` — static with `index.html` fallback; `/assets/` (Vite's hashed files) cached a year, everything else revalidated (Vite/TS PWAs)
 - `proxy` — reverse proxy to a WSGI/ASGI upstream (gunicorn, uvicorn, Unix socket or localhost port)
 
 The roles ship as the `lionel_panhaleux.server_setup` collection (`galaxy.yml`),
@@ -152,6 +152,8 @@ Consumer playbook (proxy example):
 `nginx_site_name` defaults to `service_name` — set the latter once at the play level and it flows to the postgres_db role too. Override `nginx_site_name` explicitly only when the site and DB identifiers differ.
 
 Static site: set `nginx_site_type: static` and `nginx_site_root: /var/www/codex`. SPA: `nginx_site_type: spa` and `nginx_site_root: /var/www/warroom`. `nginx_site_plain_http_paths: ["/"]` serves the whole site over plain HTTP as well as HTTPS.
+
+Public files anyone may link to (`static.krcg.org`, `lackey.krcg.org`): add `nginx_site_public: true` to a static or spa site. Every response carries read-only CORS, directories are listed, and port 80 serves the site exactly as 443 does, `nginx_site_extra_locations` included. An extra location with its own `add_header` inherits none from the server, so it must repeat the CORS headers.
 
 All requests for a site are logged to journald under the tag `nginx_<nginx_site_name>`:
 
