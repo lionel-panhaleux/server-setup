@@ -106,13 +106,6 @@ bucket.
 
 ## Known, not yet done
 
-- **`archondb` on gravelines (158 MB) is an orphan.** It was left behind when
-  `archon-website.yml` moved to frankfurt on 2025-11-13. Confirmed dead:
-  `listen_addresses = localhost`, no `host` pg_hba rule, the firewall never opens
-  5432, zero recorded writes, and consecutive daily dumps byte-identical. Cleanup:
-  dump it off-host, `DROP DATABASE archondb`, remove its `pg_hba` line, then
-  `DROP ROLE archon` (it will then serve nothing), then delete the
-  `krcg-db-backups/archondb` bucket prefix by hand.
 - **`/etc/systemd/system/krcg-bot.service.<pid>.<timestamp>~` on gravelines** is a
   template backup of the old hand-made unit and carries a Discord token inline.
   Its ansible deploy is stable now, so the file can go.
