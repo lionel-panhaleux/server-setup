@@ -107,6 +107,23 @@
     mode: "0644"
   notify: Reload nginx
 
+# certbot's timer renews the certificate files, but nginx keeps serving the old
+# ones from memory until it reloads. Content matches the hook the legacy myserver
+# role and archon-vibe's nginx_tls write to the same path, so they don't flip it.
+- name: Ensure certbot deploy hooks directory
+  ansible.builtin.file:
+    path: /etc/letsencrypt/renewal-hooks/deploy
+    state: directory
+    mode: "0755"
+
+- name: Reload nginx after a certificate renewal
+  ansible.builtin.copy:
+    dest: /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh
+    mode: "0755"
+    content: |
+      #!/bin/bash
+      systemctl reload nginx
+
 - name: Ensure certbot timer is enabled
   ansible.builtin.systemd:
     name: certbot.timer

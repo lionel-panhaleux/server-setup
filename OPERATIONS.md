@@ -72,15 +72,15 @@ real move; check the IP.
   nothing removes them when a database is dropped.
 - The legacy `register-ssl` role installed
   `/etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh` (from 2026-01-24), and
-  **that hook is what makes a renewed certificate take effect**: certbot's timer
-  renews the files but does not reload nginx, and neither `nginx_site` nor this
-  repo's `tasks/` install a hook. Without it nginx keeps serving the old
-  certificate from memory until something else reloads it — and expires on it if
-  nothing does for 30 days. It is almost certainly on strasbourg (`warroom.yml` was
-  added, so first run, on 2026-02-07); frankfurt gets the same file from
-  `archon-vibe`'s `nginx_tls`. Whether gravelines has it depends on a rulings or
-  v2 API run after 2026-01-24 — `ls /etc/letsencrypt/renewal-hooks/deploy/` on
-  each host before relying on it. **Do not delete it as a `myserver` leftover.**
+  for a while **that leftover was the only thing making a renewed certificate take
+  effect**: certbot's timer renews the files but does not reload nginx, and
+  `nginx_site` installs no hook. Without it nginx keeps serving the old certificate
+  from memory, and expires on it if nothing reloads it within 30 days. This repo's
+  `tasks/base.yml` now owns that file, with the same content as the legacy role and
+  `archon-vibe`'s `nginx_tls` (which writes it on frankfurt too), so the writers
+  agree. A host is covered once `setup.yml` has run on it since that change; before
+  that, whether gravelines had it depended on a rulings or v2 API run after
+  2026-01-24.
 
 ## Moving a site onto `nginx_site` — the renewal webroot
 
