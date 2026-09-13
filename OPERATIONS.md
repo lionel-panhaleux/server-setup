@@ -24,7 +24,6 @@ migrated.
 
 | Playbook | Group | Host |
 |---|---|---|
-| `v2-krcg-api.yml` | `krcg_gra` | gravelines |
 | `timer-bot.yml` | `krcg_gra` | gravelines |
 | `codex.yml`, `codex-beta.yml`, `krcg-api.yml`, `krcg-static.yml`, `lackey-static.yml`, `warroom.yml` | `krcg_sbg` | strasbourg |
 | `add-pubkey.yml`, `initial.yml`, `setup.yml` | `all` | — |
@@ -129,6 +128,7 @@ today only because the token has never been rotated.
 
 Nothing outstanding.
 
-`/home/lpanhaleux/projects/` on gravelines now holds exactly `timer-bot` and
-`v2.api.krcg.org` — the two apps still deployed from `myserver`. Anything else
-appearing there is a leftover, not a deployment.
+`/home/lpanhaleux/projects/` on gravelines now holds exactly `timer-bot` — the
+only app still deployed there from `myserver`, and the last `python-worker` on
+the fleet. Anything else appearing in that directory is a leftover, not a
+deployment.
