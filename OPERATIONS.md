@@ -11,32 +11,33 @@ Two ansible repos deploy to these hosts:
   UFW, the postgres cluster and its backup/verify timers, observability, plus the
   `nginx_site` / `postgres_db` roles shipped as the `lionel_panhaleux.server_setup`
   collection.
-- **`myserver`** — a **legacy repo that still owns live deployments**. Do not
-  conclude a service is undeployed because it is absent from this repo.
+- **`myserver`** — a **legacy repo** that deployed most apps before they moved,
+  and still holds the bootstrap playbooks. What its roles left on the hosts is
+  still live (see below): do not conclude a file is unmanaged, or unneeded,
+  because nothing in this repo writes it.
 
 The migration direction is per-app `ansible/` (or `deploy/`) directories,
 consuming the collection where they need its roles — a bot with no database and
 no vhost needs none, only this repo's foundation (Alloy ships its journal to
 Loki whatever the unit). `krcg-bot`, `timer`, `rulings-website`, `archon-vibe`,
-`krcg-api`, `codex-of-the-damned`, `warroom-app` and `vtes-lackeyccg` have all made the move; each
-playbook was deleted from `myserver` only after the new deploy was verified
-running on the host. A playbook still in `myserver` is one not yet migrated.
+`krcg-api`, `codex-of-the-damned`, `warroom-app`, `vtes-lackeyccg` and `krcg-static`
+have all made the move; each playbook was deleted from `myserver` only after the
+new deploy was verified running on the host. **`myserver` no longer deploys any
+site or service.**
 
-### What still deploys from `myserver`
+### What is left in `myserver`
 
 | Playbook | Group | Host |
 |---|---|---|
-| `krcg-static.yml` | `krcg_sbg` | strasbourg |
 | `add-pubkey.yml`, `initial.yml`, `setup.yml` | `all` | — |
 
-For `static.krcg.org`, GitHub Actions rsyncs the *content*, but the nginx vhost
-and the certificate still come from `myserver`. `lackey.krcg.org` works the same
-way except that its vhost and certificate come from `vtes-lackeyccg/ansible/`: its
-content still arrives by rsync as `lpanhaleux` into
-`/home/lpanhaleux/projects/lackey.krcg.org/dist`. In `sites-enabled` the two
-generations are easy to tell apart: `myserver` writes **plain files** named
+Only bootstrap: packages, the base user, and deployment keys. `static.krcg.org` and
+`lackey.krcg.org` still get their *content* by GitHub Actions rsync as `lpanhaleux`
+into `/home/lpanhaleux/projects/<domain>/dist`, but their vhosts and certificates
+come from `krcg-static/ansible/` and `vtes-lackeyccg/ansible/`. In `sites-enabled` the
+two generations are easy to tell apart: `myserver` wrote **plain files** named
 `<domain>.http.conf` / `<domain>.https.conf`; the collection writes **symlinks**
-named `<site_name>.conf`.
+named `<site_name>.conf`. A plain file there now is a leftover.
 
 **Frankfurt is no longer a `myserver` target at all** — everything on it comes
 from `archon-vibe`'s own deploy.
@@ -46,13 +47,14 @@ Its group names differ from this repo's inventory hostnames:
 | `myserver` group | here | IP | |
 |---|---|---|---|
 | `krcg_gra` | gravelines | 152.228.170.51 | **vestigial** |
-| `krcg_sbg` | strasbourg | 51.178.45.139 | |
+| `krcg_sbg` | strasbourg | 51.178.45.139 | **vestigial** |
 | `krcg_lim` | frankfurt | 57.129.110.107 | **vestigial** |
 
-`krcg_gra` and `krcg_lim` are still declared in `myserver/hosts.ini` but **no
-playbook targets them any more** — gravelines lost its last one when `timer`
-moved. An unused inventory group reads exactly like a live one, so check for
-a playbook before assuming it deploys something.
+All three are still declared in `myserver/hosts.ini` but **no playbook targets a
+group any more** — the bootstrap playbooks run on `all`. Gravelines lost its last
+one when `timer` moved, strasbourg when `krcg-static` did. An unused inventory
+group reads exactly like a live one, so check for a playbook before assuming it
+deploys something.
 
 It was once `krcg_mun` — the group was renamed, the host did not change. When
 reading `myserver` git history, a playbook "moving hosts" may be a rename or a
@@ -68,6 +70,17 @@ real move; check the IP.
   several lines. **That role no longer exists in `myserver`** (it went with the
   last two playbooks that used it), but the lines it wrote are still on the hosts:
   nothing removes them when a database is dropped.
+- The legacy `register-ssl` role installed
+  `/etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh` (from 2026-01-24), and
+  **that hook is what makes a renewed certificate take effect**: certbot's timer
+  renews the files but does not reload nginx, and neither `nginx_site` nor this
+  repo's `tasks/` install a hook. Without it nginx keeps serving the old
+  certificate from memory until something else reloads it — and expires on it if
+  nothing does for 30 days. It is almost certainly on strasbourg (`warroom.yml` was
+  added, so first run, on 2026-02-07); frankfurt gets the same file from
+  `archon-vibe`'s `nginx_tls`. Whether gravelines has it depends on a rulings or
+  v2 API run after 2026-01-24 — `ls /etc/letsencrypt/renewal-hooks/deploy/` on
+  each host before relying on it. **Do not delete it as a `myserver` leftover.**
 
 ## Moving a site onto `nginx_site` — the renewal webroot
 
@@ -104,8 +117,8 @@ The migrating deploy must **delete the `myserver` vhost files before the role
 runs**: while they still answer for the domain on port 80, the re-issue's
 challenge 404s behind them (and counts against Let's Encrypt's failed-validation
 limit). `warroom-app/ansible/deploy.yml` is the worked example — and its first
-run is how `warroom.krcg.org` went through the repair, as `lackey.krcg.org` did
-after it. When `static` moves off `myserver`, do the same.
+run is how `warroom.krcg.org` went through the repair, as `lackey.krcg.org` and
+`static.krcg.org` did after it.
 
 ## Backup layout (restic)
 
@@ -172,8 +185,8 @@ Nothing outstanding.
 appearing there is a leftover, not a deployment.
 
 On strasbourg the same directory holds exactly `lackey.krcg.org` and
-`static.krcg.org`, the two sites whose content GitHub Actions rsyncs there; only
-`static.krcg.org`'s vhost still comes from `myserver`. `warroom.krcg.org`
+`static.krcg.org`, the two sites whose content GitHub Actions rsyncs there; both
+vhosts come from their own repos, as public `nginx_site` sites. `warroom.krcg.org`
 is served from `/var/www/warroom` by `warroom-app`'s own deploy, which removed its
 old directory and vhosts. The uWSGI-era `api.krcg.org` and Codex units, vhosts and
 project directories are gone, and so are the two round-robin ACME stubs
