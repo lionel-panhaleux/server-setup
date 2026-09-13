@@ -18,23 +18,22 @@ The migration direction is per-app `ansible/` (or `deploy/`) directories,
 consuming the collection where they need its roles — a bot with no database and
 no vhost needs none, only this repo's foundation (Alloy ships its journal to
 Loki whatever the unit). `krcg-bot`, `timer`, `rulings-website`, `archon-vibe`,
-`krcg-api` and `codex-of-the-damned` have all made the move; each playbook was deleted from
-`myserver` only after the new deploy was verified running on the host. A
-playbook still in `myserver` is one not yet migrated.
+`krcg-api`, `codex-of-the-damned` and `warroom-app` have all made the move; each
+playbook was deleted from `myserver` only after the new deploy was verified
+running on the host. A playbook still in `myserver` is one not yet migrated.
 
 ### What still deploys from `myserver`
 
 | Playbook | Group | Host |
 |---|---|---|
-| `krcg-static.yml`, `lackey-static.yml`, `warroom.yml` | `krcg_sbg` | strasbourg |
+| `krcg-static.yml`, `lackey-static.yml` | `krcg_sbg` | strasbourg |
 | `add-pubkey.yml`, `initial.yml`, `setup.yml` | `all` | — |
 
-For the three strasbourg sites, CI or the playbook ships the *content* (`static`
-and `lackey` rsync from GitHub Actions; `warroom.yml` syncs a local `dist/`), but
-the nginx vhost and the certificate still come from `myserver`. In
-`sites-enabled` the two generations are easy to tell apart: `myserver` writes
-**plain files** named `<domain>.http.conf` / `<domain>.https.conf`; the
-collection writes **symlinks** named `<site_name>.conf`.
+For the two strasbourg sites, GitHub Actions rsyncs the *content*, but the nginx
+vhost and the certificate still come from `myserver`. In `sites-enabled` the two
+generations are easy to tell apart: `myserver` writes **plain files** named
+`<domain>.http.conf` / `<domain>.https.conf`; the collection writes **symlinks**
+named `<site_name>.conf`.
 
 **Frankfurt is no longer a `myserver` target at all** — everything on it comes
 from `archon-vibe`'s own deploy.
@@ -96,8 +95,14 @@ the `acme-challenge` location nginx serves for that domain on port 80.
 `/var/www/acme` is **not** stale: `archon.krcg.org` and `api.archon.krcg.org`
 come from `archon-vibe`'s own `nginx_tls` role, which serves that path. The
 role's check only reads the lineage of its own `nginx_site_domain`, so it never
-touches them. When `static`, `lackey` or `warroom` move off `myserver`, their
-lineages will go through this repair on the first deploy.
+touches them.
+
+The migrating deploy must **delete the `myserver` vhost files before the role
+runs**: while they still answer for the domain on port 80, the re-issue's
+challenge 404s behind them (and counts against Let's Encrypt's failed-validation
+limit). `warroom-app/ansible/deploy.yml` is the worked example — and its first
+run is how `warroom.krcg.org` went through the repair. When `static` or `lackey`
+move off `myserver`, do the same.
 
 ## Backup layout (restic)
 
@@ -163,10 +168,11 @@ Nothing outstanding.
 (`timer-bot`) was deleted after `timer` moved to `/opt/timer-bot`. Anything
 appearing there is a leftover, not a deployment.
 
-On strasbourg the same directory holds exactly `lackey.krcg.org`,
-`static.krcg.org` and `warroom.krcg.org` — the three sites still deployed from
-`myserver`. The uWSGI-era `api.krcg.org` and Codex units, vhosts and project
-directories are gone, and so are the two round-robin ACME stubs
+On strasbourg the same directory holds exactly `lackey.krcg.org` and
+`static.krcg.org` — the two sites still deployed from `myserver`. `warroom.krcg.org`
+is served from `/var/www/warroom` by `warroom-app`'s own deploy, which removed its
+old directory and vhosts. The uWSGI-era `api.krcg.org` and Codex units, vhosts and
+project directories are gone, and so are the two round-robin ACME stubs
 (`rulings.krcg.org.http.conf`, `v2.api.krcg.org.http.conf`) and the orphan bare
 `api.krcg.org` certificate. Every certificate on the fleet renews through the
 webroot its vhost serves.
