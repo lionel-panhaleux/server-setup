@@ -148,8 +148,7 @@ today only because the token has never been rotated.
 ## Fleet history
 
 What happened, oldest first. Most apps were once deployed by `myserver`, a
-legacy repo that now holds only bootstrap playbooks and deploys nothing; a date
-below is the day a deploy left it. Its inventory groups, for reading its git
+legacy repo, now archived; a date below is the day a deploy left it. Its inventory groups, for reading its git
 history: `krcg_gra` is gravelines, `krcg_sbg` strasbourg, `krcg_lim` frankfurt
 (once named `krcg_mun`, same host).
 
@@ -163,4 +162,4 @@ history: `krcg_gra` is gravelines, `krcg_sbg` strasbourg, `krcg_lim` frankfurt
 | 2026-09-13 | Collection 1.0.9: `codex-beta.krcg.org` and `rulings.krcg.org` are found renewing through `myserver`'s `/usr/share/nginx/html` after moving onto `nginx_site`, inside certbot's 30-day window; the role starts repairing renewal confs. `myserver`'s `postgresql-database` role, which wrote the `pg_hba.conf` lines above, is gone by then. |
 | 2026-09-13 | `warroom-app`, `vtes-lackeyccg` and `krcg-static` move their sites onto `nginx_site`; each first deploy removed the `myserver` vhosts (and warroom's old content directory) and re-issued the certificate. `myserver` deploys nothing after this. Collection 1.0.13 adds public sites. |
 | 2026-09-13 | This repo adds gzip for every site, and takes over the certbot reload hook: until then only `register-ssl`'s leftover copy reloaded nginx after a renewal. |
-| 2026-09-14 | The app deploys drop their migration-only steps (the `myserver` vhost removals, `cleanup.yml`, cutover notes). |
+| 2026-09-14 | The app deploys drop their migration-only steps (the `myserver` vhost removals, `cleanup.yml`, cutover notes), and `krcg-static` stops trusting gravelines' host key. `myserver` is archived: `add-admin.yml` and `setup.yml` cover its bootstrap playbooks. |
