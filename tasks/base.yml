@@ -108,8 +108,8 @@
   notify: Reload nginx
 
 # certbot's timer renews the certificate files, but nginx keeps serving the old
-# ones from memory until it reloads. Content matches the hook the legacy myserver
-# role and archon-vibe's nginx_tls write to the same path, so they don't flip it.
+# ones from memory until it reloads. Content matches the hook archon-vibe's
+# nginx_tls writes to the same path on frankfurt, so the two don't flip it.
 - name: Ensure certbot deploy hooks directory
   ansible.builtin.file:
     path: /etc/letsencrypt/renewal-hooks/deploy

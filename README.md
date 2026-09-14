@@ -30,7 +30,7 @@ host_key: "1.2.3.4 ssh-ed25519 AAAA..."
 
 The setup playbook prints the ready-to-paste `host_key` value at the end of each run.
 
-`inventory/group_vars/servers.yml` pins the default Ansible user and private key for the `[servers]` group, so day-to-day playbook runs don't need `--user` or `--private-key`:
+`inventory/group_vars/servers/vars.yml` pins the default Ansible user and private key for the `[servers]` group, so day-to-day playbook runs don't need `--user` or `--private-key`:
 
 ```yaml
 ansible_user: deploy
@@ -54,7 +54,7 @@ This produces `~/.ssh/<name>` (private) and `~/.ssh/<name>.pub` (public). The `.
 
 ### 2. Add admin users (as root)
 
-Run once per user to create a sudo user with SSH key access. The `--user`/`--private-key` flags override the defaults in `inventory/group_vars/servers.yml` for the initial root-only login:
+Run once per user to create a sudo user with SSH key access. The `--user`/`--private-key` flags override the defaults in `inventory/group_vars/servers/vars.yml` for the initial root-only login:
 
 ```bash
 ansible-playbook add-admin.yml --limit HOST --user root --private-key ~/.ssh/initial_root_key \
@@ -86,15 +86,16 @@ ansible HOST -m reboot -b
 
 ## Deploy targets
 
-`deploy-targets.yml` maps GitHub repos to inventory hostnames:
+Apps deploy from their own repos; [OPERATIONS.md](OPERATIONS.md) lists which repo deploys what, and how. `deploy-targets.yml` maps each GitHub repo to an inventory hostname, optionally with a GitHub environment other than `production`:
 
 ```yaml
-lionel-panhaleux/krcg-api: api
+lionel-panhaleux/krcg-api: strasbourg
+vtes-biased/archon-vibe: {host: frankfurt, env: beta}
 ```
 
 ### Sync variables to GitHub
 
-Push `DEPLOY_HOST` and `DEPLOY_HOST_KEY` to all repos listed in `deploy-targets.conf`:
+Push `DEPLOY_HOST` and `DEPLOY_HOST_KEY` to all repos listed in `deploy-targets.yml`:
 
 ```bash
 just sync
@@ -105,7 +106,7 @@ just sync
 Push `DEPLOY_SSH_KEY` as an environment secret to all repos:
 
 ```bash
-just sync-key ~/.ssh/deploy_key
+just sync-key ~/.ssh/deploy
 ```
 
 ## GitHub Actions
@@ -151,7 +152,7 @@ Consumer playbook (proxy example):
 
 `nginx_site_name` defaults to `service_name` — set the latter once at the play level and it flows to the postgres_db role too. Override `nginx_site_name` explicitly only when the site and DB identifiers differ.
 
-Static site: set `nginx_site_type: static` and `nginx_site_root: /var/www/codex`. SPA: `nginx_site_type: spa` and `nginx_site_root: /var/www/warroom`. `nginx_site_plain_http_paths: ["/"]` serves the whole site over plain HTTP as well as HTTPS.
+Static site: set `nginx_site_type: static` and `nginx_site_root` to the directory to serve. SPA: `nginx_site_type: spa` and `nginx_site_root: /var/www/warroom`. `nginx_site_plain_http_paths` lists path prefixes served over plain HTTP instead of redirecting (`["/"]` for the whole site).
 
 Public files anyone may link to (`static.krcg.org`, `lackey.krcg.org`): add `nginx_site_public: true` to a static or spa site. Every response carries read-only CORS, directories are listed, and port 80 serves the site exactly as 443 does, `nginx_site_extra_locations` included. An extra location with its own `add_header` inherits none from the server, so it must repeat the CORS headers.
 

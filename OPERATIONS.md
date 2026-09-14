@@ -1,124 +1,93 @@
 # Fleet operations notes
 
 Things that are true about the running fleet and are not derivable from this
-repo alone. Kept here because the traps below have each cost real time.
+repo alone. Kept here because the traps below have each cost real time. How the
+fleet got here is logged at the end, in [Fleet history](#fleet-history).
 
-## This repo is not the whole picture
+## Who deploys what
 
-Two ansible repos deploy to these hosts:
+This repo is the foundation, converged per host with `setup.yml` (the `Setup`
+workflow, or a laptop with the vault password): base packages, SSH hardening,
+UFW, nginx defaults (the websocket map, gzip, the certbot reload hook), the
+postgres cluster with its backup and verify timers, and observability. It also
+ships the `nginx_site` and `postgres_db` roles as the `lionel_panhaleux.server_setup`
+collection. Every app deploys from its own repo:
 
-- **`server-setup`** (this one) — the foundation: base packages, SSH hardening,
-  UFW, the postgres cluster and its backup/verify timers, observability, plus the
-  `nginx_site` / `postgres_db` roles shipped as the `lionel_panhaleux.server_setup`
-  collection.
-- **`myserver`** — a **legacy repo** that deployed most apps before they moved,
-  and still holds the bootstrap playbooks. What its roles left on the hosts is
-  still live (see below): do not conclude a file is unmanaged, or unneeded,
-  because nothing in this repo writes it.
-
-The migration direction is per-app `ansible/` (or `deploy/`) directories,
-consuming the collection where they need its roles — a bot with no database and
-no vhost needs none, only this repo's foundation (Alloy ships its journal to
-Loki whatever the unit). `krcg-bot`, `timer`, `rulings-website`, `archon-vibe`,
-`krcg-api`, `codex-of-the-damned`, `warroom-app`, `vtes-lackeyccg` and `krcg-static`
-have all made the move; each playbook was deleted from `myserver` only after the
-new deploy was verified running on the host. **`myserver` no longer deploys any
-site or service.**
-
-### What is left in `myserver`
-
-| Playbook | Group | Host |
-|---|---|---|
-| `add-pubkey.yml`, `initial.yml`, `setup.yml` | `all` | — |
-
-Only bootstrap: packages, the base user, and deployment keys. `static.krcg.org` and
-`lackey.krcg.org` still get their *content* by GitHub Actions rsync as `lpanhaleux`
-into `/home/lpanhaleux/projects/<domain>/dist`, but their vhosts and certificates
-come from `krcg-static/ansible/` and `vtes-lackeyccg/ansible/`. In `sites-enabled` the
-two generations are easy to tell apart: `myserver` wrote **plain files** named
-`<domain>.http.conf` / `<domain>.https.conf`; the collection writes **symlinks**
-named `<site_name>.conf`. A plain file there now is a leftover.
-
-**Frankfurt is no longer a `myserver` target at all** — everything on it comes
-from `archon-vibe`'s own deploy.
-
-Its group names differ from this repo's inventory hostnames:
-
-| `myserver` group | here | IP | |
+| Repo | Host | Playbook | Run by |
 |---|---|---|---|
-| `krcg_gra` | gravelines | 152.228.170.51 | **vestigial** |
-| `krcg_sbg` | strasbourg | 51.178.45.139 | **vestigial** |
-| `krcg_lim` | frankfurt | 57.129.110.107 | **vestigial** |
+| `krcg-api` | strasbourg | `deploy/` | CI on a published release, or `workflow_dispatch` |
+| `codex-of-the-damned` | strasbourg | `deploy/` | CI, `workflow_dispatch` only (after a PyPI release) |
+| `warroom-app` | strasbourg | `ansible/` | CI on push to `main` |
+| `krcg-static` | strasbourg | `ansible/` (vhost) | a laptop; content by the `Deployment` and `Data` actions |
+| `vtes-lackeyccg` | strasbourg | `ansible/` (vhost) | a laptop; the plugin by the `Deployment` and `Playtest Deployment` actions |
+| `krcg-bot` | gravelines | `ansible/` | CI on a published release, or `just deploy` |
+| `timer` | gravelines | `ansible/` | `just deploy` |
+| `rulings-website` | gravelines | `ansible/` | `just deploy` |
+| `archon-vibe` | frankfurt | `ansible/` | its `just` recipes |
 
-All three are still declared in `myserver/hosts.ini` but **no playbook targets a
-group any more** — the bootstrap playbooks run on `all`. Gravelines lost its last
-one when `timer` moved, strasbourg when `krcg-static` did. An unused inventory
-group reads exactly like a live one, so check for a playbook before assuming it
-deploys something.
+Playbooks connect as `deploy`: CI with `DEPLOY_SSH_KEY`, `DEPLOY_HOST` and
+`DEPLOY_HOST_KEY`, which `just sync` / `just sync-key` push from
+`deploy-targets.yml`; a laptop with `~/.ssh/deploy`. Only the `krcg-api`,
+`codex-of-the-damned`, `warroom-app` and `krcg-bot` workflows read those values:
+`deploy-targets.yml` also lists `krcg-static`, `vtes-lackeyccg`, `rulings-website`
+and `archon-vibe`, whose playbooks run from a laptop.
 
-It was once `krcg_mun` — the group was renamed, the host did not change. When
-reading `myserver` git history, a playbook "moving hosts" may be a rename or a
-real move; check the IP.
+**Content rsync is the exception.** The `static.krcg.org` and `lackey.krcg.org`
+files are rsynced as `lpanhaleux` into `/home/lpanhaleux/projects/<domain>/dist`,
+with the `KRCG_DEPLOY_KEY` and `KRCG_SBG_HOST_ID` secrets of each repo's
+`krcg.org` environment. **No playbook manages that directory**, and the key is
+only in `lpanhaleux`'s `authorized_keys` because it was put there:
+`add-admin.yml -e username=lpanhaleux -e ssh_key_file=<its .pub>` re-adds it
+without touching the other keys. On strasbourg `projects/` holds exactly those two
+sites; on the other hosts it is empty, and anything appearing there is not a
+deployment.
 
-## What legacy `myserver` roles left on the hosts
+## nginx and certificates
 
-- The `python-worker` role — venv under `/home/lpanhaleux/projects/<app>`, the
-  token inline in the unit, logs under `SYSLOG_IDENTIFIER=bash` — **is gone**; it
-  went with `timer-bot.yml`, the last playbook to use it.
-- The legacy `postgresql-database` role added a `local <db> <user> scram-sha-256`
-  line to `pg_hba.conf` per (user, database) pair — so one role could appear on
-  several lines. **That role no longer exists in `myserver`** (it went with the
-  last two playbooks that used it), but the lines it wrote are still on the hosts:
-  nothing removes them when a database is dropped.
-- The legacy `register-ssl` role installed
-  `/etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh` (from 2026-01-24), and
-  for a while **that leftover was the only thing making a renewed certificate take
-  effect**: certbot's timer renews the files but does not reload nginx, and
-  `nginx_site` installs no hook. Without it nginx keeps serving the old certificate
-  from memory, and expires on it if nothing reloads it within 30 days. This repo's
-  `tasks/base.yml` now owns that file, with the same content as the legacy role and
-  `archon-vibe`'s `nginx_tls` (which writes it on frankfurt too), so the writers
-  agree. A host is covered once `setup.yml` has run on it since that change; before
-  that, whether gravelines had it depended on a rulings or v2 API run after
-  2026-01-24.
+- `nginx_site` writes `/etc/nginx/sites-available/<site_name>.conf` and enables
+  it with a **symlink**; `archon-vibe` writes its own vhosts on frankfurt. A plain
+  `<domain>.http.conf` / `<domain>.https.conf` file in `sites-enabled` comes from
+  no current deploy.
+- `conf.d/gzip.conf` sets every gzip setting **except `gzip on`**, which Debian's
+  `nginx.conf` already has: nginx refuses the directive twice, and the reload
+  handler does not run `nginx -t` first.
+- certbot's timer renews the files but does not reload nginx, which keeps serving
+  the old certificate from memory — and expires on it if nothing reloads within
+  30 days. `/etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh`, from
+  `tasks/base.yml`, does the reload. `archon-vibe`'s `nginx_tls` writes the same
+  path on frankfurt: **keep the two contents identical**, or each converge
+  rewrites the other's.
 
-## Moving a site onto `nginx_site` — the renewal webroot
+### The renewal webroot
 
-Three ACME webroots exist on the fleet, and a certificate renews only through
-the one its renewal conf names:
+Two ACME webroots exist, and a certificate renews only through the one its
+renewal conf names — the one of the deploy that issued it:
 
 | written by | webroot |
 |---|---|
-| `myserver` `register-ssl` | `/usr/share/nginx/html` |
 | collection `nginx_site` | `/var/www/certbot` |
 | `archon-vibe` `nginx_tls` (frankfurt) | `/var/www/acme` |
 
-A lineage keeps the renewal conf of whatever **issued** it. Move a site from
-`myserver` onto `nginx_site` while its cert is still valid and the role used to
-request nothing — the cert covered every name — so certbot kept writing tokens
-to `/usr/share/nginx/html` while the new vhost served `/var/www/certbot`. **The
-deploy succeeds, the site serves, and every unattended renewal 404s** until the
-cert expires. It happened to `codex-beta.krcg.org` (strasbourg) and
-`rulings.krcg.org` (gravelines), both found inside certbot's 30-day window.
+A certificate issued through another webroot keeps renewing there after its site
+moves onto `nginx_site`: **the deploy succeeds, the site serves, and every
+unattended renewal 404s** until the cert expires. `nginx_site` reads its domain's
+renewal conf and, when it names another webroot, re-issues through its own with
+`--force-renewal` — but only when that site is deployed. It reads only its own
+`nginx_site_domain`, so it never touches `archon-vibe`'s certificates. To check a
+host by hand, compare each `/etc/letsencrypt/renewal/<name>.conf`
+`[[webroot_map]]` against the `root` of the `acme-challenge` location nginx serves
+for that domain on port 80.
 
-Since collection 1.0.9 `nginx_site` reads the renewal conf and, when it names
-another webroot, re-issues through its own with `--force-renewal`. But it only
-does so **when that site is deployed** — a migration is not finished until the
-app has deployed once on 1.0.9 or later. To check a host by hand, compare each
-`/etc/letsencrypt/renewal/<name>.conf` `[[webroot_map]]` against the `root` of
-the `acme-challenge` location nginx serves for that domain on port 80.
+A site taking over a domain from another vhost must **remove that vhost before
+`nginx_site` runs**: while it still answers on port 80, the re-issue's challenge
+404s behind it, and counts against Let's Encrypt's failed-validation limit.
 
-`/var/www/acme` is **not** stale: `archon.krcg.org` and `api.archon.krcg.org`
-come from `archon-vibe`'s own `nginx_tls` role, which serves that path. The
-role's check only reads the lineage of its own `nginx_site_domain`, so it never
-touches them.
+## Postgres access lines
 
-The migrating deploy must **delete the `myserver` vhost files before the role
-runs**: while they still answer for the domain on port 80, the re-issue's
-challenge 404s behind them (and counts against Let's Encrypt's failed-validation
-limit). `warroom-app/ansible/deploy.yml` is the worked example — and its first
-run is how `warroom.krcg.org` went through the repair, as `lackey.krcg.org` and
-`static.krcg.org` did after it.
+`pg_hba.conf` carries `local <db> <user> scram-sha-256` lines, one per (user,
+database) pair, that no playbook in this repo writes — so a role can appear on
+several lines, and **nothing removes a line when its database is dropped**. Edit
+them as in step 6 of [Retiring a service](#retiring-a-service--the-order-that-bites).
 
 ## Backup layout (restic)
 
@@ -166,8 +135,8 @@ bucket.
 
 ## `backup: true` keeps superseded secrets on disk
 
-`krcg-bot/ansible/deploy.yml` sets `backup: true` on the token file, deliberately
-— on the first converge the hand-made unit held the only copy of that token.
+`krcg-bot/ansible/deploy.yml` sets `backup: true` on the token file and on the
+unit, so a converge that changes either leaves the previous version beside it.
 
 The backup is **not** more exposed than the live file: `backup_local` copies via
 `preserved_copy`, which is `shutil.copy2` plus an explicit `chown`, so mode and
@@ -176,20 +145,22 @@ converge that made it). The trap is lifecycle, not permissions — **a rotation 
 not finished until `/etc/krcg-bot/env.*~` is deleted.** That directory is clean
 today only because the token has never been rotated.
 
-## Known, not yet done
+## Fleet history
 
-Nothing outstanding.
+What happened, oldest first. Most apps were once deployed by `myserver`, a
+legacy repo that now holds only bootstrap playbooks and deploys nothing; a date
+below is the day a deploy left it. Its inventory groups, for reading its git
+history: `krcg_gra` is gravelines, `krcg_sbg` strasbourg, `krcg_lim` frankfurt
+(once named `krcg_mun`, same host).
 
-`/home/lpanhaleux/projects/` on gravelines is empty: the last `python-worker` venv
-(`timer-bot`) was deleted after `timer` moved to `/opt/timer-bot`. Anything
-appearing there is a leftover, not a deployment.
-
-On strasbourg the same directory holds exactly `lackey.krcg.org` and
-`static.krcg.org`, the two sites whose content GitHub Actions rsyncs there; both
-vhosts come from their own repos, as public `nginx_site` sites. `warroom.krcg.org`
-is served from `/var/www/warroom` by `warroom-app`'s own deploy, which removed its
-old directory and vhosts. The uWSGI-era `api.krcg.org` and Codex units, vhosts and
-project directories are gone, and so are the two round-robin ACME stubs
-(`rulings.krcg.org.http.conf`, `v2.api.krcg.org.http.conf`) and the orphan bare
-`api.krcg.org` certificate. Every certificate on the fleet renews through the
-webroot its vhost serves.
+| Date | Change |
+|---|---|
+| 2026-01-24 | `myserver` drops DNS round-robin; its `register-ssl` role starts installing the certbot reload hook. |
+| 2026-07-26 | `krcg-bot` moves to its own `ansible/` on gravelines, taking over a hand-made `krcg-bot.service` (token inline) under the same unit name. |
+| 2026-09-13 | `myserver` drops archon-bot; rulings moves to `rulings-website` (a one-way schema change to the shared `vtes-rulings` database) and the archon website to `archon-vibe`; the v2 KRCG API is retired. |
+| 2026-09-13 | `krcg-api` and `codex-of-the-damned` move to `deploy/`. One-shot `cleanup.yml` playbooks, since deleted, removed their Flask/uWSGI units, vhosts and project directories; the round-robin ACME stubs (`rulings.krcg.org.http.conf`, `v2.api.krcg.org.http.conf`) and a bare `api.krcg.org` certificate went too. |
+| 2026-09-13 | `timer` moves to `ansible/` (`/opt/timer-bot`); with it go the last `python-worker` venv under `projects/` and that role, which put the token inline in the unit. |
+| 2026-09-13 | Collection 1.0.9: `codex-beta.krcg.org` and `rulings.krcg.org` are found renewing through `myserver`'s `/usr/share/nginx/html` after moving onto `nginx_site`, inside certbot's 30-day window; the role starts repairing renewal confs. `myserver`'s `postgresql-database` role, which wrote the `pg_hba.conf` lines above, is gone by then. |
+| 2026-09-13 | `warroom-app`, `vtes-lackeyccg` and `krcg-static` move their sites onto `nginx_site`; each first deploy removed the `myserver` vhosts (and warroom's old content directory) and re-issued the certificate. `myserver` deploys nothing after this. Collection 1.0.13 adds public sites. |
+| 2026-09-13 | This repo adds gzip for every site, and takes over the certbot reload hook: until then only `register-ssl`'s leftover copy reloaded nginx after a renewal. |
+| 2026-09-14 | The app deploys drop their migration-only steps (the `myserver` vhost removals, `cleanup.yml`, cutover notes). |
