@@ -27,20 +27,15 @@ collection. Every app deploys from its own repo:
 
 Playbooks connect as `deploy`: CI with `DEPLOY_SSH_KEY`, `DEPLOY_HOST` and
 `DEPLOY_HOST_KEY`, which `just sync` / `just sync-key` push from
-`deploy-targets.yml`; a laptop with `~/.ssh/deploy`. Only the `krcg-api`,
-`codex-of-the-damned`, `warroom-app` and `krcg-bot` workflows read those values:
-`deploy-targets.yml` also lists `krcg-static`, `vtes-lackeyccg`, `rulings-website`
-and `archon-vibe`, whose playbooks run from a laptop.
+`deploy-targets.yml`; a laptop with `~/.ssh/deploy`. `rulings-website` and
+`archon-vibe` are listed there too, but their playbooks only run from a laptop.
 
-**Content rsync is the exception.** The `static.krcg.org` and `lackey.krcg.org`
-files are rsynced as `lpanhaleux` into `/home/lpanhaleux/projects/<domain>/dist`,
-with the `KRCG_DEPLOY_KEY` and `KRCG_SBG_HOST_ID` secrets of each repo's
-`krcg.org` environment. **No playbook manages that directory**, and the key is
-only in `lpanhaleux`'s `authorized_keys` because it was put there:
-`add-admin.yml -e username=lpanhaleux -e ssh_key_file=<its .pub>` re-adds it
-without touching the other keys. On strasbourg `projects/` holds exactly those two
-sites; on the other hosts it is empty, and anything appearing there is not a
-deployment.
+The `static.krcg.org` and `lackey.krcg.org` files are not shipped by a playbook:
+their actions rsync them as `deploy`, without sudo, into `/var/www/static` and
+`/var/www/lackey`, which each repo's playbook creates owned by `deploy`. Lackey's
+playtest plugins sit there in `<PLUGIN_UID>/` folders that exist **nowhere else**:
+each is deployed from its own playtest branch, and `make deploy` filters them out
+of its `--delete`.
 
 ## nginx and certificates
 
@@ -163,3 +158,4 @@ history: `krcg_gra` is gravelines, `krcg_sbg` strasbourg, `krcg_lim` frankfurt
 | 2026-09-13 | `warroom-app`, `vtes-lackeyccg` and `krcg-static` move their sites onto `nginx_site`; each first deploy removed the `myserver` vhosts (and warroom's old content directory) and re-issued the certificate. `myserver` deploys nothing after this. Collection 1.0.13 adds public sites. |
 | 2026-09-13 | This repo adds gzip for every site, and takes over the certbot reload hook: until then only `register-ssl`'s leftover copy reloaded nginx after a renewal. |
 | 2026-09-14 | The app deploys drop their migration-only steps (the `myserver` vhost removals, `cleanup.yml`, cutover notes), and `krcg-static` stops trusting gravelines' host key. `myserver` is archived: `add-admin.yml` and `setup.yml` cover its bootstrap playbooks. |
+| 2026-09-14 | The `static.krcg.org` and `lackey.krcg.org` content moves from `/home/lpanhaleux/projects/<domain>/dist` to `/var/www/<site>`, rsynced as `deploy`; the `krcg_deploy` key and the `KRCG_*` secrets go. That key had been rsynced into lackey's site root: an unquoted `-e ssh -i <key>` made it a source file. |
