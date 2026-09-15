@@ -128,18 +128,6 @@ bucket.
    `select * from pg_hba_file_rules where error is not null` **before**
    `pg_reload_conf()`.
 
-## `backup: true` keeps superseded secrets on disk
-
-`krcg-bot/ansible/deploy.yml` sets `backup: true` on the token file and on the
-unit, so a converge that changes either leaves the previous version beside it.
-
-The backup is **not** more exposed than the live file: `backup_local` copies via
-`preserved_copy`, which is `shutil.copy2` plus an explicit `chown`, so mode and
-owner carry over (and mtime, which is why a backup can look older than the
-converge that made it). The trap is lifecycle, not permissions — **a rotation is
-not finished until `/etc/krcg-bot/env.*~` is deleted.** That directory is clean
-today only because the token has never been rotated.
-
 ## Fleet history
 
 What happened, oldest first. Most apps were once deployed by `myserver`, a
@@ -159,3 +147,4 @@ history: `krcg_gra` is gravelines, `krcg_sbg` strasbourg, `krcg_lim` frankfurt
 | 2026-09-13 | This repo adds gzip for every site, and takes over the certbot reload hook: until then only `register-ssl`'s leftover copy reloaded nginx after a renewal. |
 | 2026-09-14 | The app deploys drop their migration-only steps (the `myserver` vhost removals, `cleanup.yml`, cutover notes), and `krcg-static` stops trusting gravelines' host key. `myserver` is archived: `add-admin.yml` and `setup.yml` cover its bootstrap playbooks. |
 | 2026-09-14 | The `static.krcg.org` and `lackey.krcg.org` content moves from `/home/lpanhaleux/projects/<domain>/dist` to `/var/www/<site>`, rsynced as `deploy`; the `krcg_deploy` key and the `KRCG_*` secrets go. That key had been rsynced into lackey's site root: an unquoted `-e ssh -i <key>` made it a source file. |
+| 2026-09-15 | `krcg-bot`'s deploy stops passing `backup: true` on its token file and unit, a takeover-only safeguard for the inline token: a converge that changed either had left a timestamped `~` copy beside it, and the 4.10 deploy left one of the unit. |
