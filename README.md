@@ -2,294 +2,202 @@
 
 [![Test](https://github.com/lionel-panhaleux/server-setup/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/lionel-panhaleux/server-setup/actions/workflows/test.yml)
 
-Ansible playbooks for Debian/Ubuntu server provisioning. Installs base packages, hardens SSH, configures UFW firewall, and sets up nginx + certbot.
+[pyinfra](https://pyinfra.com) deploys for Debian/Ubuntu servers: base packages, SSH hardening, UFW, nginx + certbot, a backed-up postgres cluster and observability. It is also the `server_setup` Python package whose `nginx_site` and `postgres_db` deploys the apps call from their own repos.
+
+Apps still on Ansible pin the `ansible-final` tag, the last release of the `lionel_panhaleux.server_setup` collection.
 
 ## Prerequisites
 
-- A Debian/Ubuntu server with root SSH access (for initial user setup)
-- [uv](https://docs.astral.sh/uv/) installed locally, then run `uv sync` to install Ansible and dev tools
-- [just](https://just.systems/) for running sync recipes
-- [gh](https://cli.github.com/) CLI, authenticated, for pushing variables/secrets to GitHub
-- Ansible collections: `ansible-galaxy collection install -r requirements.yml`
-- (optional but recommended) [pre-commit](https://pre-commit.com/) hooks: `pre-commit install` once per clone
+- [uv](https://docs.astral.sh/uv/), [just](https://just.systems/), [sops](https://getsops.io/) and [age](https://age-encryption.org/)
+- [gh](https://cli.github.com/), authenticated, for pushing deploy targets to GitHub
+- (optional) [pre-commit](https://pre-commit.com/) hooks: `pre-commit install` once per clone
 
-## Inventory
+## Layout
 
-`inventory/hosts` is the single source of truth for server IPs:
-
-```ini
-[servers]
-api     ansible_host=1.2.3.4
+```
+inventory.py        hosts, and what differs between them
+known_hosts         each host's SSH key; every connection checks it strictly
+secrets.sops.yaml   encrypted secrets (sops + age, recipients in .sops.yaml)
+deploys/            setup.py, upgrade.py, add_admin.py
+server_setup/       the package: one module per concern, its files and templates
+deploy_targets.py   which repo deploys to which host
 ```
 
-Each host has a `host_key` variable in `inventory/host_vars/<name>.yml`:
+## Secrets
 
-```yaml
-host_key: "1.2.3.4 ssh-ed25519 AAAA..."
+`secrets.sops.yaml` holds every secret, encrypted to the age keys in `.sops.yaml`. The `just` recipes point sops at `~/.config/sops/age/keys.txt` (on macOS sops would otherwise look in `~/Library/Application Support/sops/age/`); set `SOPS_AGE_KEY_FILE` or `SOPS_AGE_KEY` to use another. Edit it in place:
+
+```bash
+just secrets
 ```
 
-The setup playbook prints the ready-to-paste `host_key` value at the end of each run.
-
-`inventory/group_vars/servers/vars.yml` pins the default Ansible user and private key for the `[servers]` group, so day-to-day playbook runs don't need `--user` or `--private-key`:
-
-```yaml
-ansible_user: deploy
-ansible_ssh_private_key_file: ~/.ssh/deploy
-```
-
-CLI flags still override these (used by `add-admin.yml` for the initial root login).
+To add a recipient (a new admin, a CI key), add its public key to `.sops.yaml` and run `sops updatekeys secrets.sops.yaml`.
 
 ## Usage
 
 ### 1. Generate SSH keys
 
-Generate one ed25519 keypair per identity (admin user, deploy user). `ssh-keygen` will prompt for a passphrase — leave empty for the deploy key (CI cannot type a passphrase), set one for admin keys.
+One ed25519 keypair per identity. Leave the deploy key without a passphrase (CI cannot type one); set one for admin keys.
 
 ```bash
 ssh-keygen -t ed25519 -f ~/.ssh/lpanhaleux -C "lpanhaleux@$(hostname)"
 ssh-keygen -t ed25519 -f ~/.ssh/deploy     -C "deploy@server-setup" -N ""
 ```
 
-This produces `~/.ssh/<name>` (private) and `~/.ssh/<name>.pub` (public). The `.pub` file is what `add-admin.yml` reads; the private key stays on your machine (or, for the deploy key, is uploaded as a GitHub secret — see [Sync deploy key](#sync-deploy-key-to-github)).
+### 2. Add a new host
 
-### 2. Add admin users (as root)
-
-Run once per user to create a sudo user with SSH key access. The `--user`/`--private-key` flags override the defaults in `inventory/group_vars/servers/vars.yml` for the initial root-only login:
+Record its SSH key, then create the admin users as root:
 
 ```bash
-ansible-playbook add-admin.yml --limit HOST --user root --private-key ~/.ssh/initial_root_key \
-    -e "username=lpanhaleux" -e "ssh_key_file=~/.ssh/lpanhaleux.pub"
-
-ansible-playbook add-admin.yml --limit HOST --user root --private-key ~/.ssh/initial_root_key \
-    -e "username=deploy" -e "ssh_key_file=~/.ssh/deploy.pub"
+just add-host 1.2.3.4
+ADMIN=lpanhaleux ADMIN_KEY=~/.ssh/lpanhaleux.pub just add-admin 1.2.3.4
+ADMIN=deploy     ADMIN_KEY=~/.ssh/deploy.pub     just add-admin 1.2.3.4
 ```
+
+Then add it to `inventory.py`, commit `known_hosts`, and `just sync` so the apps' CI trusts the key too.
 
 ### 3. System setup
 
-Hardens SSH (disables root login), installs packages, configures UFW, nginx, and certbot:
-
 ```bash
-ansible-playbook setup.yml --limit HOST
+just setup frankfurt            # shows every change with its diff, then asks
+just setup frankfurt --dry      # only shows
+just setup servers              # every host
 ```
 
-After this step, root SSH access is disabled. Subsequent `add-admin.yml` runs can drop the `--user`/`--private-key` overrides and use the inventory defaults (`deploy` user with `~/.ssh/deploy`).
+Setup disables root SSH login. A run that ends with `REBOOT REQUIRED` needs a reboot: `ssh HOST sudo systemctl reboot`.
 
-The playbook also writes the server's SSH host key directly to `inventory/host_vars/<name>.yml`. Commit the change so `just sync` can push it to the deploy-target repos.
+A fresh box needs a second run: postgres logging is configured from the `conf.d` directory, which only exists once the first run has installed postgresql.
 
-### 4. Reboot when required
-
-If the setup playbook ends with `REBOOT REQUIRED`, trigger a graceful reboot and wait for the host to come back:
+### 4. Distribution upgrade
 
 ```bash
-ansible HOST -m reboot -b
+just upgrade frankfurt              # reports the release available
+CONFIRM=1 just upgrade frankfurt    # upgrades and reboots
 ```
 
 ## Deploy targets
 
-Apps deploy from their own repos; [OPERATIONS.md](OPERATIONS.md) lists which repo deploys what, and how. `deploy-targets.yml` maps each GitHub repo to an inventory hostname, optionally with a GitHub environment other than `production`:
-
-```yaml
-lionel-panhaleux/krcg-api: strasbourg
-vtes-biased/archon-vibe: {host: frankfurt, env: beta}
-```
-
-### Sync variables to GitHub
-
-Push `DEPLOY_HOST` and `DEPLOY_HOST_KEY` to all repos listed in `deploy-targets.yml`:
+Apps deploy from their own repos; [OPERATIONS.md](OPERATIONS.md) lists which repo deploys what, and how. `deploy_targets.py` maps each GitHub repo to an inventory host and a GitHub environment:
 
 ```bash
-just sync
-```
-
-### Sync deploy key to GitHub
-
-Push `DEPLOY_SSH_KEY` as an environment secret to all repos:
-
-```bash
-just sync-key ~/.ssh/deploy
+just sync                   # DEPLOY_HOST and DEPLOY_HOST_KEY to every target
+just sync-key ~/.ssh/deploy # DEPLOY_SSH_KEY to every target
 ```
 
 ## GitHub Actions
 
-The `setup.yml` and `upgrade.yml` workflows run via `workflow_dispatch` and take the target host as a dropdown input. They read `DEPLOY_SSH_KEY` from secrets and resolve the host key from the committed `inventory/host_vars/<host>.yml`, so no `DEPLOY_HOST_KEY` variable is needed on this repo.
+`setup.yml` and `upgrade.yml` run on `workflow_dispatch`, with the host as a dropdown. They read `DEPLOY_SSH_KEY` from the repo secrets and check host keys against the committed `known_hosts`. `setup.yml` also needs `SOPS_AGE_KEY`: the private key of an age identity listed in `.sops.yaml`.
 
-## Reusable roles
+`test.yml` lints, runs the unit tests, has the runner's nginx accept every `nginx_site` variant (`nginx -t`), checks the hardened `sshd_config`, and converges `postgres_db` twice on the runner itself.
+
+## Reusable deploys
+
+An app adds the package to its deploy dependencies, pinned to a tag:
+
+```toml
+[dependency-groups]
+deploy = ["server-setup @ git+https://github.com/lionel-panhaleux/server-setup@v2.0.0"]
+```
+
+and calls it from its own pyinfra deploy:
+
+```python
+from server_setup import nginx_site, postgres_db
+
+postgres_db(database="krcg", owner="krcg")
+nginx_site(site="krcg_api", domain="api.krcg.org", type="proxy", upstream="http://127.0.0.1:8000")
+```
 
 ### `nginx_site`
 
-Deploys an nginx site with automatic Let's Encrypt issuance and journald logging. Supports three modes:
+An nginx site with automatic Let's Encrypt issuance and journald logging:
 
-- `static` — serve files from a directory (cached 5 minutes, images and fonts an hour)
-- `spa` — static with `index.html` fallback; `/assets/` (Vite's hashed files) cached a year, everything else revalidated (Vite/TS PWAs)
-- `proxy` — reverse proxy to a WSGI/ASGI upstream (gunicorn, uvicorn, Unix socket or localhost port)
+- `static`: files from `root` (cached 5 minutes, images and fonts an hour)
+- `spa`: static with an `index.html` fallback; `/assets/` (Vite's hashed files) cached a year, everything else revalidated
+- `proxy`: reverse proxy to `upstream` (a localhost port or a unix socket)
 
-The roles ship as the `lionel_panhaleux.server_setup` collection (`galaxy.yml`),
-installable straight from git. Consumer app `requirements.yml`:
+Options: `aliases` (more `server_name`s, on the certificate too), `cert_extra_domains` (on the certificate only), `open_api_paths` (path prefixes with permissive CORS; `("/",)` for the whole site), `plain_http_paths` (served over plain HTTP instead of redirecting), `client_max_body_size` (default `10m`), `extra_locations` (raw nginx appended to the HTTPS server).
 
-```yaml
-collections:
-  - name: https://github.com/lionel-panhaleux/server-setup.git
-    type: git
-    version: main   # or a tag/SHA
-```
+`public=True` (static or spa) is for files anyone may link to (`static.krcg.org`, `lackey.krcg.org`): every response carries read-only CORS, directories are listed, and port 80 serves the site exactly as 443 does, `extra_locations` included. An extra location with its own `add_header` inherits none from the server, so it must repeat the CORS headers.
 
-Consumer playbook (proxy example):
-
-```yaml
-- hosts: all
-  become: true
-  vars:
-    service_name: krcg_api       # flows to both nginx_site_name and postgres_db_name (alphanumeric + underscore only — becomes an nginx syslog tag)
-  roles:
-    - role: lionel_panhaleux.server_setup.nginx_site
-      vars:
-        nginx_site_domain: api.krcg.org
-        nginx_site_type: proxy
-        nginx_site_upstream: http://127.0.0.1:8000
-        nginx_site_open_api_paths: ["/public/"]     # permissive CORS
-        nginx_site_plain_http_paths: ["/health"]    # served over plain HTTP, no redirect
-```
-
-`nginx_site_name` defaults to `service_name` — set the latter once at the play level and it flows to the postgres_db role too. Override `nginx_site_name` explicitly only when the site and DB identifiers differ.
-
-Static site: set `nginx_site_type: static` and `nginx_site_root` to the directory to serve. SPA: `nginx_site_type: spa` and `nginx_site_root: /var/www/warroom`. `nginx_site_plain_http_paths` lists path prefixes served over plain HTTP instead of redirecting (`["/"]` for the whole site).
-
-Public files anyone may link to (`static.krcg.org`, `lackey.krcg.org`): add `nginx_site_public: true` to a static or spa site. Every response carries read-only CORS, directories are listed, and port 80 serves the site exactly as 443 does, `nginx_site_extra_locations` included. An extra location with its own `add_header` inherits none from the server, so it must repeat the CORS headers.
-
-All requests for a site are logged to journald under the tag `nginx_<nginx_site_name>`:
+`site` must be alphanumeric or underscore: it names the config file and tags the site's logs.
 
 ```bash
-journalctl -t nginx_krcg_api -f
+journalctl -t krcg_api -f
 ```
 
-### Cluster-wide postgres backup
+### `postgres_db`
 
-`setup.yml` installs a single `postgres-backup.timer` that runs `/usr/local/bin/pg-backup` daily. The script iterates every non-template database in the cluster, dumps each to `/var/backups/postgres/<db>-<timestamp>.dump` (pg_dump's custom format — binary, compressed, restorable with `pg_restore`), dumps cluster globals (`pg_dumpall --globals-only` — login roles, password hashes, memberships; without them a full-cluster restore has no roles for the apps to connect as), and prunes local files older than `postgres_backup_retention_days` (default `7`).
+A database and its owning role, with web-app timeouts: `statement_timeout=15s`, `idle_in_transaction_session_timeout=60s`, `lock_timeout=5s` (override per app, or per transaction with `SET LOCAL statement_timeout = '10min'` for batch jobs). Apps on the same host log in over the unix socket by peer auth, so `password` is optional. The cluster-wide backup picks the database up on its next run.
 
-New databases created by the `postgres_db` role are picked up automatically on the next timer fire — no re-run needed.
+### Restore
 
-Tune via `inventory/group_vars/servers/vars.yml`:
-
-- `postgres_backup_dir` — default `/var/backups/postgres`
-- `postgres_backup_schedule` — default `daily` (any `OnCalendar=` expression)
-- `postgres_backup_retention_days` — default `7`
-- `postgres_backup_exclude` — default `[]`; ephemeral DBs to skip (set per host in `host_vars/`). Scratch/reseed DBs churn near-full-size snapshots (rewritten data doesn't dedup) for backups nothing will ever restore.
-
-One DB failing doesn't stop the others; the script aggregates failures and exits nonzero so `systemctl status postgres-backup` surfaces the problem.
-
-Local pruning sweeps the whole backup dir by age, so dumps of dropped or excluded DBs age out too. Remote repos have no such sweep — a dropped/excluded DB's restic repo is never pruned again and holds its space forever. The nightly run therefore ends with an orphan scan (rclone lists the bucket's prefixes) that logs a journald warning per repo without a backed-up database; deleting a repo (`rclone purge` its prefix) stays a deliberate manual act.
-
-#### Remote backup to Scaleway Object Storage (opt-in)
-
-Each scheduled dump can be uploaded via [restic](https://restic.net) to an S3-compatible bucket (Scaleway, R2, B2…). restic encrypts, deduplicates, and keeps its own snapshot history per DB — one repo per DB at `s3:<endpoint>/<bucket>/<db>` — so local retention (default 7 days) can stay short while the cloud copy covers months via `keep-daily/weekly/monthly`.
-
-**One-time Scaleway setup.** Create an Object Storage bucket (e.g. in `fr-par`) and an IAM API key scoped to it. Generate a restic password separately (`openssl rand -base64 32`) — losing it means losing the backups. Store all three as vault-encrypted vars in `inventory/group_vars/servers/vault.yml` (create the `servers/` directory if needed; Ansible merges every `.yml` in it into the `servers` group's vars):
-
-```yaml
-vault_remote_backup_access_key: "SCWXXXXXXXXXXXXXX"
-vault_remote_backup_secret_key: "..."
-vault_remote_backup_restic_password: "..."
-```
-
-Encrypt with `ansible-vault encrypt inventory/group_vars/servers/vault.yml`. Configure Ansible to find the password (`vault_password_file` in `ansible.cfg`, `--vault-password-file`, or `--ask-vault-pass`); for the GitHub workflow, add `ANSIBLE_VAULT_PASSWORD` as a secret and pass `--vault-password-file` in the step.
-
-**Enable uploads** by adding to `inventory/group_vars/servers/vars.yml` and re-running `setup.yml` — it writes `/etc/postgres-backup/remote.env` (mode 0640, `root:postgres`) from the vault secrets and renders the bucket into the service unit:
-
-```yaml
-remote_backup_enabled: true
-postgres_remote_backup_bucket: "your-bucket-name"
-postgres_remote_backup_endpoint: "https://s3.fr-par.scw.cloud"   # default; fr-par, or nl-ams, pl-waw
-postgres_remote_backup_keep_daily: 7
-postgres_remote_backup_keep_weekly: 4
-postgres_remote_backup_keep_monthly: 12
-```
-
-On each timer fire the script loops: for every DB it runs `pg_dump` → `restic backup` → `restic forget --prune` → local prune. Local prune runs regardless of whether the remote steps succeeded (disk-full prevention). Per-DB restic repos are created on first run (`restic init` is self-triggering), isolating pruning and restore surface between DBs.
-
-Verify and restore from any host with restic installed:
+Restore is destructive: it drops and recreates the database. On the host, from the latest remote snapshot, a given one, or a local dump:
 
 ```bash
-export AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=... RESTIC_PASSWORD=...
-export RESTIC_REPOSITORY=s3:https://s3.fr-par.scw.cloud/your-bucket/krcg
-restic snapshots
-restic restore latest --target /tmp/krcg-restore
+sudo -u postgres pg-restore krcg krcg
+sudo -u postgres pg-restore krcg krcg 3a1b9f2c
+sudo -u postgres pg-restore krcg krcg /var/backups/postgres/krcg-20260421T030000.dump
 ```
 
-#### Weekly restore-verify
+The recreated database has no timeouts until the app's deploy runs `postgres_db` again.
 
-`setup.yml` also installs `postgres-backup-check.timer` (weekly): with remote backup enabled it runs `restic check --read-data-subset=1/10` per repo (bit-rot detection) and restore-round-trips the latest snapshot; without remote it round-trips the newest local dump. Either way the round-trip goes into a throwaway `pg_check_<db>` database that must contain at least one user table — catching dumps that exist but don't restore. A free-space guard skips (and fails) the round-trip rather than fill the PGDATA filesystem.
+## Cluster-wide postgres backup
 
-#### Failure alerting (opt-in dead-man's switch)
+`postgres-backup.timer` runs `/usr/local/bin/pg-backup` daily. It dumps every non-template database to `/var/backups/postgres/<db>-<timestamp>.dump` (pg_dump's custom format), dumps the cluster globals (`pg_dumpall --globals-only`: login roles, password hashes, memberships; without them a full-cluster restore has no roles for the apps to connect as), and prunes local files older than 7 days.
 
-Both scripts optionally ping a [healthchecks.io](https://healthchecks.io)-style URL: `GET <url>` on success, `GET <url>/fail` on failure. Absence of the success ping catches the failure mode logs can't — the timer that silently stopped firing. Set in `inventory/group_vars/servers/vault.yml` (ping UUIDs are capability URLs, so vault them):
+Each dump is also pushed with [restic](https://restic.net) to Scaleway Object Storage, one repository per database at `s3:<endpoint>/<bucket>/<db>`, kept 7 daily, 4 weekly and 12 monthly. restic encrypts and deduplicates; repositories are created on first use. Local pruning runs whether or not the upload succeeded.
 
-```yaml
-vault_postgres_backup_healthcheck_url: "https://hc-ping.com/..."         # daily backup
-vault_postgres_backup_check_healthcheck_url: "https://hc-ping.com/..."  # weekly check
-```
+A host's `backup_exclude` in `inventory.py` lists ephemeral databases to skip: scratch and reseeded databases churn near-full-size snapshots for backups nothing will ever restore.
 
-Give the daily check a ~2h grace period and the weekly one a few hours, to absorb timer jitter and run time. Unset = no pings.
+One database failing doesn't stop the others; the script exits nonzero so `systemctl status postgres-backup` surfaces it. A dropped or excluded database's restic repository is never pruned again, so the nightly run ends with an orphan scan (rclone lists the bucket's prefixes) that logs a warning per repository without a backed-up database; deleting one (`rclone purge` its prefix) stays a manual act.
 
-### Observability (Grafana Cloud + Alloy)
+The secrets: `remote_backup_access_key` and `remote_backup_secret_key` (a Scaleway IAM key scoped to the bucket) and `remote_backup_restic_password` (losing it means losing the backups).
 
-`tasks/observability.yml` installs [Grafana Alloy](https://grafana.com/docs/alloy/) — a unified agent that replaces node_exporter + Promtail + any local Prometheus/Loki. Alloy ships:
+### Weekly restore-verify
 
-- Node metrics (CPU, memory, disk, network, systemd unit status) via `prometheus.exporter.unix`
-- Postgres metrics via `prometheus.exporter.postgres` (using a dedicated `alloy` DB role with `pg_monitor`, connecting over the Unix socket via peer auth — no DB password)
-- journald logs via `loki.source.journal`, with per-app labels extracted from `SYSLOG_IDENTIFIER` → `tag` so dashboards can filter by service (`{tag="krcg"}`)
+`postgres-backup-check.timer` runs `restic check --read-data-subset=1/10` per repository and round-trips the latest snapshot into a throwaway `pg_check_<db>` database that must contain at least one user table, catching dumps that exist but don't restore. A free-space guard skips (and fails) the round-trip rather than fill the disk.
 
-All traffic is outbound to Grafana Cloud endpoints — no inbound UFW port is opened.
+### Failure alerting
 
-**One-time setup.** In [Grafana Cloud](https://grafana.com/auth/sign-in/) create an Access Policy with `metrics:write` and `logs:write` scopes, then an API token (one token covers both — it goes into both `*_password` vars). From the Stack → Details page copy the Prometheus push URL + instance ID (a numeric user) and Loki push URL + instance ID (a different numeric user).
+Both scripts ping a [healthchecks.io](https://healthchecks.io)-style URL: `GET <url>` on success, `GET <url>/fail` on failure. The absence of the success ping catches what logs can't: the timer that silently stopped firing. The URLs are capabilities, so they are secrets: `postgres_backup_healthcheck_url` (daily) and `postgres_backup_check_healthcheck_url` (weekly). Give the daily check a ~2h grace period and the weekly one a few hours.
 
-Add the URL placeholders in `inventory/group_vars/servers/vars.yml` with the real endpoints:
+## Observability (Grafana Cloud + Alloy)
 
-```yaml
-grafana_cloud_prom_url: "https://prometheus-prod-XX-XXX.grafana.net/api/prom/push"
-grafana_cloud_loki_url: "https://logs-prod-XXX.grafana.net/loki/api/v1/push"
-```
+[Grafana Alloy](https://grafana.com/docs/alloy/) ships, all outbound (no firewall port opens):
 
-Add the secrets to `inventory/group_vars/servers/vault.yml` (vault-encrypted):
+- node metrics (CPU, memory, disk, network, systemd units) via `prometheus.exporter.unix`
+- postgres metrics via `prometheus.exporter.postgres`, as an `alloy` role with `pg_monitor` over the unix socket (peer auth, no password)
+- the journal via `loki.source.journal`, with `SYSLOG_IDENTIFIER` as the `tag` label so dashboards filter by service (`{tag="krcg"}`)
 
-```yaml
-vault_grafana_cloud_prom_user: "NUMERIC_PROM_INSTANCE_ID"
-vault_grafana_cloud_prom_password: "glc_..."
-vault_grafana_cloud_loki_user: "NUMERIC_LOKI_INSTANCE_ID"
-vault_grafana_cloud_loki_password: "glc_..."   # same token reused
-```
+The push URLs are in `server_setup/templates/alloy.alloy.j2`. The secrets: `grafana_cloud_prom_user` and `grafana_cloud_loki_user` (the numeric instance IDs from the stack's Details page) and `grafana_cloud_prom_password` / `grafana_cloud_loki_password` (one Access Policy token with `metrics:write` and `logs:write`, used for both).
 
-**Enable** by flipping `observability_enabled: true` in `vars.yml` and re-running `setup.yml`. First run creates the `alloy` postgres role with `pg_monitor`, writes `/etc/alloy/secrets.env` (0600 alloy:alloy), renders `/etc/alloy/config.alloy`, and starts `alloy.service`.
-
-Sanity-check on the host:
+Sanity-check on a host:
 
 ```bash
 systemctl status alloy
-ss -tnp | grep alloy    # outbound to Grafana Cloud only
 journalctl -u alloy -f  # config parse errors surface here
 ```
 
-In Grafana Cloud → Explore, metrics should appear within ~60s (`up{host="strasbourg"}`) and logs within seconds (`{host="strasbourg", tag="krcg"}`).
+Metrics appear in Grafana Cloud within a minute (`up{host="strasbourg"}`), logs within seconds (`{host="strasbourg", tag="krcg"}`).
 
-**Alert rules** (define in Grafana Cloud UI or via Terraform):
+**Alert rules** (Grafana Cloud UI):
 
-- `last_over_time(ALERTS_FOR_STATE{alertname!=""}[5m]) == 0` — meta-check that alert eval is working
-- `time() - last_over_time(node_systemd_unit_state{name="postgres-backup.service", state="active"}[25h]) > 0` — daily backup hasn't run in 25h → P1
-- `node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes < 0.15` — disk < 15% → P2
-- `up{job="integrations/unix"} == 0` — host not scraping for >5m → P1
-- `pg_up == 0` or `nginx_up == 0` (via postgres exporter / node exporter systemd unit) — service down → P1
+- `last_over_time(ALERTS_FOR_STATE{alertname!=""}[5m]) == 0`: alert evaluation itself stopped
+- `time() - last_over_time(node_systemd_unit_state{name="postgres-backup.service", state="active"}[25h]) > 0`: the daily backup hasn't run in 25h (P1)
+- `node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes < 0.15`: disk under 15% (P2)
+- `up{job="integrations/unix"} == 0`: host not scraped for 5 minutes (P1)
+- `pg_up == 0`: postgres down (P1)
 
-#### CI telemetry (GitHub Actions → Grafana Cloud)
+### CI telemetry (GitHub Actions → Grafana Cloud)
 
-`.github/workflows/otel-reporter.yml` pushes one trace per CI workflow run straight from GitHub's runners to Grafana Cloud's OTLP gateway — no scraper, nothing lands on your VPSes. It's triggered by `workflow_run: completed` so every run emits a span regardless of how it ended (success, failure, cancellation).
+`.github/workflows/otel-reporter.yml` pushes one trace per CI workflow run from GitHub's runners to Grafana Cloud's OTLP gateway, on `workflow_run: completed`, so every run emits a span however it ended.
 
-**One-time setup.** In the Grafana Cloud portal, open your stack → click **Configure** on the OpenTelemetry tile → **Generate now**. It hands you three env vars; copy two of them into repo-level GitHub secrets verbatim:
+**One-time setup.** In the Grafana Cloud portal, open the stack, **Configure** on the OpenTelemetry tile, **Generate now**, and copy two of its env vars into repo secrets: `GRAFANA_OTLP_ENDPOINT` ← `OTEL_EXPORTER_OTLP_ENDPOINT` (the workflow appends `/v1/traces`) and `GRAFANA_OTLP_HEADERS` ← `OTEL_EXPORTER_OTLP_HEADERS`.
 
-- `GRAFANA_OTLP_ENDPOINT` ← `OTEL_EXPORTER_OTLP_ENDPOINT` (e.g. `https://otlp-gateway-prod-XX-X.grafana.net/otlp` — the workflow appends `/v1/traces` itself)
-- `GRAFANA_OTLP_HEADERS` ← `OTEL_EXPORTER_OTLP_HEADERS` (already base64-encoded as `Authorization=Basic …`)
+The reporter uses [`dash0hq/otel-cicd-action`](https://github.com/dash0hq/otel-cicd-action) (MIT, source audited, pinned by commit SHA). It is not a verified publisher: an account enforcing **Allow specified actions** must allowlist `dash0hq/otel-cicd-action@*`.
 
-The reporter uses the third-party action [`dash0hq/otel-cicd-action`](https://github.com/dash0hq/otel-cicd-action) (MIT, source audited, pinned by commit SHA in the workflow). It's not a verified publisher, so if your account/org enforces **Allow specified actions and reusable workflows**, allowlist `dash0hq/otel-cicd-action@*` under **Settings → Actions → General** (at user level to cover all repos).
-
-Grafana Cloud's Tempo metrics generator turns the spans into `traces_spanmetrics_calls_total`, so alerting is a standard PromQL rule:
+Tempo's metrics generator turns the spans into `traces_spanmetrics_calls_total`:
 
 ```promql
 sum by (service_name, span_name) (
@@ -297,85 +205,17 @@ sum by (service_name, span_name) (
 ) > 0
 ```
 
-The same workflow file drops into app repos (krcg-api, codex, etc.) — only the `workflows:` list and `otelServiceName:` need updating per repo.
+The same workflow drops into app repos; only its `workflows:` list and `otelServiceName:` change.
 
-### `postgres_db`
+## Log conventions
 
-Creates a postgres database and owning role, applies web-app timeouts, and gets picked up automatically by the cluster-wide backup timer. Requires the `community.postgresql` collection (`ansible-galaxy collection install community.postgresql`).
+Each app uses one identifier (e.g. `krcg`) at every layer: its database name, its nginx `site` (the syslog tag), and the `SyslogIdentifier=` of its systemd unit. `pg-backup` tags each database's progress with `logger -t <db>`, and postgres prefixes every session line with `@<db>` (`log_line_prefix = '[%p] %q@%d '`).
 
-Setup (default `tasks/main.yml`):
-
-```yaml
-- hosts: all
-  become: true
-  vars:
-    service_name: krcg           # also used by nginx_site_name; override postgres_db_name only if they diverge
-  roles:
-    - role: lionel_panhaleux.server_setup.postgres_db
-      vars:
-        postgres_db_user: krcg
-        postgres_db_password: "{{ vault_postgres_db_password }}"
-```
-
-Restore is destructive — it drops and recreates the DB. Local restore takes a `.dump` path:
-
-```yaml
-- include_role:
-    name: lionel_panhaleux.server_setup.postgres_db
-    tasks_from: restore
-  vars:
-    postgres_db_name: krcg
-    postgres_db_user: krcg
-    postgres_db_backup_file: /var/backups/postgres/krcg-20260421T030000.dump
-```
-
-Remote restore fetches from the host's configured restic repo (requires `setup.yml` to have written `/etc/postgres-backup/remote.env`). Defaults to the latest snapshot; override via `postgres_db_restore_snapshot`:
-
-```yaml
-- include_role:
-    name: lionel_panhaleux.server_setup.postgres_db
-    tasks_from: restore-remote
-  vars:
-    postgres_db_name: krcg
-    postgres_db_user: krcg
-    # postgres_db_restore_snapshot: 3a1b9f2c   # optional; defaults to "latest"
-```
-
-It materializes the snapshot in a tmp dir, hands the dump to `restore.yml`, and cleans up regardless of outcome.
-
-Web-app timeouts applied at setup: `statement_timeout=15s`, `idle_in_transaction_session_timeout=60s`, `lock_timeout=5s`. Override per-app via the role vars, or per-transaction from the app with `SET LOCAL statement_timeout = '10min'` for batch jobs.
-
-### Log conventions across roles
-
-Each app uses a single identifier (e.g. `krcg`) at every layer:
-
-- `service_name` at the play level — default for both `nginx_site_name` (nginx syslog tag) and `postgres_db_name` (database name)
-- `postgres_db_name` — appears as `@krcg` in postgres engine log lines; the cluster-wide `pg-backup` script tags its per-DB progress lines via `logger -t <db>` so backup activity lands under the same identifier
-- `SyslogIdentifier=` on the app's systemd service unit (set by the app's own playbook)
-
-Because all three land in journald under `SYSLOG_IDENTIFIER=krcg`, `journalctl -t krcg` pulls the full app surface in one view. The shared postgres cluster stays under `postgresql.service`, and `setup.yml` sets `log_line_prefix = '[%p] %q@%d '` so every session line starts with `@<dbname>` — scopeable via journald's `-g` regex without shell escaping. The backup service itself logs under `SyslogIdentifier=postgres-backup` for a cluster-wide view of `pg_dump` / `restic` stderr.
-
-#### `applog` — merged view for one app
-
-`setup.yml` installs `/usr/local/bin/applog`, which tails both halves in parallel:
+`applog` merges both halves for one app:
 
 ```bash
-applog krcg                          # follow everything for krcg
-applog krcg --since '1h ago'         # any journalctl flags pass through
+applog krcg                   # follow everything for krcg
+applog krcg --since '1h ago'  # any journalctl flags pass through
 ```
 
-It runs, in parallel:
-
-```bash
-journalctl -f -t krcg                         # app service + nginx site + per-DB backup progress
-journalctl -f -u postgresql -g '@krcg'        # postgres engine lines for krcg's database
-```
-
-Narrower atomic queries (run directly when you don't want the merged stream):
-
-```bash
-journalctl -u krcg -f                         # app service only
-journalctl -u nginx -t krcg -f                # this app's nginx access/error only
-journalctl -u postgresql -f                   # full shared postgres engine (all DBs)
-journalctl -t postgres-backup -f              # pg_dump / restic stderr
-```
+It runs `journalctl -t krcg` (app, nginx site, backup progress) beside `journalctl -u postgresql -g '@krcg'` (engine lines for its database). The backup service logs under `postgres-backup` for a cluster-wide view.

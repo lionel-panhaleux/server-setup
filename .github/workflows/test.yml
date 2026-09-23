@@ -6,55 +6,51 @@ on:
     branches: [main]
 
 jobs:
-  lint:
+  test:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Install Ansible + linters
-        run: pip install ansible ansible-lint yamllint
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
 
-      - name: Install Ansible collections
-        run: ansible-galaxy collection install -r requirements.yml
-
-      - name: Run ansible-lint
-        run: ansible-lint
-
-      - name: Run yamllint
-        run: yamllint .
-
-  molecule:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        role:
-          - nginx_site
-          - postgres_db
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Set up Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: "3.14"
-
-      - name: Install Ansible + molecule + docker driver
-        run: pip install ansible molecule 'molecule-plugins[docker]'
-
-      - name: Install Ansible collections
+      - name: Lint
         run: |
-          ansible-galaxy collection install -r requirements.yml
-          ansible-galaxy collection install community.docker
+          uv run ruff check
+          uv run ruff format --check
 
-      - name: Molecule test
-        run: molecule test
-        working-directory: roles/${{ matrix.role }}
-        env:
-          # molecule-plugins (<= 25.8.12, still unfixed on their main) docker
-          # create.yml reads item.invocation.module_args.dest, but ansible-core
-          # >= 2.21 omits `invocation` from task results by default. Re-enable
-          # injection until molecule-plugins ships a fix.
-          ANSIBLE_INJECT_INVOCATION: "true"
+      - name: Unit tests
+        run: uv run pytest
+
+      - name: Install nginx, postgresql and sshd
+        run: sudo apt-get update && sudo apt-get install -y nginx postgresql openssh-server
+
+      - name: Every site variant passes nginx -t
+        run: |
+          mkdir -p /tmp/sites
+          uv run python tests/test_nginx_site.py /tmp/sites
+          sudo cp /tmp/sites/*.conf /etc/nginx/sites-enabled/
+          sudo cp server_setup/files/nginx-upgrade-map.conf /etc/nginx/conf.d/upgrade_map.conf
+          for conf in /tmp/sites/*.conf; do
+            domain=$(grep -m1 -oP 'server_name \K\S+(?=;)' "$conf")
+            sudo mkdir -p "/etc/letsencrypt/live/$domain"
+            sudo openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj "/CN=$domain" \
+              -keyout "/etc/letsencrypt/live/$domain/privkey.pem" \
+              -out "/etc/letsencrypt/live/$domain/fullchain.pem"
+          done
+          sudo nginx -t
+
+      - name: sshd accepts the hardened config
+        run: sudo sshd -t -f server_setup/files/sshd_config
+
+      - name: postgres_db converges, twice
+        run: |
+          sudo systemctl start postgresql
+          uv run pyinfra @local tests/converge.py -y
+          uv run pyinfra @local tests/converge.py -y
+          settings=$(sudo -u postgres psql -tAc "SELECT unnest(setconfig) FROM pg_db_role_setting s JOIN pg_database d ON d.oid = s.setdatabase WHERE d.datname = 't_db'")
+          echo "$settings"
+          grep -qx 'statement_timeout=15s' <<< "$settings"
+          grep -qx 'lock_timeout=5s' <<< "$settings"
+          sudo -u postgres psql -tAc "SELECT 1 FROM pg_database d JOIN pg_roles r ON r.oid = d.datdba WHERE d.datname = 't_db' AND r.rolname = 't_owner'" | grep -qx 1

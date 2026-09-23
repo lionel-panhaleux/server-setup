@@ -1,0 +1,4 @@
+creation_rules:
+  - age:
+      - age1fvjdx009gywuw8gte5farkremhn3cw2wv5qmmuelxp9cnnmj29nsdg673g  # lionel-panhaleux
+      - age15mce6kj2adcnhcrfaa8h85gzqe89cudpae3hhv3s9dmrjtewrd9qqft4dd  # GitHub Actions (SOPS_AGE_KEY secret)

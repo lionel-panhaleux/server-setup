@@ -1,54 +1,40 @@
+# sops' own default is ~/Library/Application Support/sops/age/keys.txt on macOS
+export SOPS_AGE_KEY_FILE := env("SOPS_AGE_KEY_FILE", home_directory() / ".config/sops/age/keys.txt")
+
 default:
     @just --list
 
-# Sync DEPLOY_HOST and DEPLOY_HOST_KEY to each repo's configured environment
+# System setup of a host, or `servers` for all: shows the changes, then asks (--dry, -y pass through)
+setup target *flags:
+    uv run pyinfra inventory.py deploys/setup.py --limit {{ target }} --diff {{ flags }}
+
+# Distribution upgrade status of a host (CONFIRM=1 upgrades and reboots)
+upgrade target:
+    uv run pyinfra inventory.py deploys/upgrade.py --limit {{ target }} -y
+
+# Record a new host's SSH key before anything first connects to it
+add-host ip:
+    ssh-keyscan -t ed25519 {{ ip }} | grep -v '^#' >> known_hosts
+
+# Create a sudo user on a fresh host, as root (ADMIN=deploy ADMIN_KEY=~/.ssh/deploy.pub)
+add-admin ip:
+    uv run pyinfra {{ ip }} deploys/add_admin.py --ssh-user root --data ssh_known_hosts_file=known_hosts --data ssh_strict_host_key_checking=yes -y
+
+# Push DEPLOY_HOST and DEPLOY_HOST_KEY to each deploy target's GitHub environment
 sync:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    yq 'to_entries | .[] | .key + " " + (.value.host // .value) + " " + (.value.env // "production")' deploy-targets.yml | while read -r repo host env; do
-        info=$(ansible-inventory --host "$host")
-        ip=$(echo "$info" | python3 -c "import sys,json; print(json.load(sys.stdin)['ansible_host'])")
-        host_key=$(echo "$info" | python3 -c "import sys,json; print(json.load(sys.stdin)['host_key'])")
-        echo "→ $repo ($host → $env): DEPLOY_HOST=$ip"
-        gh api -X PUT "repos/$repo/environments/$env" --silent
-        gh variable set DEPLOY_HOST --repo "$repo" --env "$env" --body "$ip"
-        gh variable set DEPLOY_HOST_KEY --repo "$repo" --env "$env" --body "$host_key"
-    done
+    uv run deploy_targets.py
 
-# Sync DEPLOY_SSH_KEY to each repo's configured environment
+# Push DEPLOY_SSH_KEY to each deploy target's GitHub environment
 sync-key key_file:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    yq 'to_entries | .[] | .key + " " + (.value.env // "production")' deploy-targets.yml | while read -r repo env; do
-        echo "→ $repo ($env): DEPLOY_SSH_KEY"
-        gh api -X PUT "repos/$repo/environments/$env" --silent
-        gh secret set DEPLOY_SSH_KEY --repo "$repo" --env "$env" < "{{ key_file }}"
-    done
+    uv run deploy_targets.py {{ key_file }}
 
-# Upgrade ansible-core (uv tool) and the Galaxy collections in requirements.yml
-update:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    echo "==> ansible-core"
-    uv tool upgrade ansible-core
-    echo "==> galaxy collections"
-    ansible-galaxy collection install -r requirements.yml --upgrade
-    ansible --version | head -1
+# Edit the encrypted secrets in $EDITOR
+secrets:
+    sops edit secrets.sops.yaml
 
-# Run molecule tests locally (requires docker daemon + `uv sync --group dev`)
-test role="":
-    #!/usr/bin/env bash
-    set -euo pipefail
-    export PATH="{{ justfile_directory() }}/.venv/bin:$PATH"
-    # molecule-plugins docker create.yml needs `invocation` in task results,
-    # which ansible-core >= 2.21 omits by default (no-op on older cores).
-    export ANSIBLE_INJECT_INVOCATION=true
-    # community.docker (molecule's docker driver) ships bundled in the `ansible`
-    # package pinned by pyproject, so it's already on the .venv collection path —
-    # no `ansible-galaxy collection install`, which would pollute ~/.ansible/collections.
-    roles="{{ role }}"
-    [ -z "$roles" ] && roles="nginx_site postgres_db"
-    for r in $roles; do
-        echo "==> molecule test: $r"
-        (cd "{{ justfile_directory() }}/roles/$r" && molecule test)
-    done
+lint:
+    uv run ruff check
+    uv run ruff format --check
+
+test:
+    uv run pytest

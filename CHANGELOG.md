@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.0.0
+
+- pyinfra replaces Ansible. The repo is the `server_setup` Python package: apps
+  import `nginx_site` and `postgres_db` from a pinned git tag instead of
+  installing the collection. `ansible-final` tags the collection's last release
+  (1.0.13) for the apps still on Ansible.
+- sops + age replace ansible-vault: `secrets.sops.yaml`, recipients in
+  `.sops.yaml`, `just secrets` to edit. Keys lose their `vault_` prefix.
+- Host keys live in a committed `known_hosts` that every connection checks
+  strictly; setup no longer writes them back into the inventory.
+- The postgres backup units are static files: the local directory, retention
+  and schedule are fixed, and a host's excluded databases move to
+  `/etc/postgres-backup/backup.env`. Remote backup and observability are no
+  longer optional.
+- Restore is `pg-restore` on the host, installed beside `pg-backup`, instead of
+  the role's `restore` and `restore-remote` task files.
+- `postgres_db` no longer requires a password: apps on the host log in by peer
+  auth.
+- Tests: molecule goes. Unit tests render every `nginx_site` variant and cover
+  the certificate decisions; CI runs `nginx -t` over them and converges
+  `postgres_db` on the runner.
+
 ## 1.0.13
 
 - `nginx_site`: `nginx_site_public: true` (static and spa) serves public files

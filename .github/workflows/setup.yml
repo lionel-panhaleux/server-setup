@@ -24,24 +24,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Install Ansible
-        run: pip install ansible
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
 
-      - name: Install Ansible collections
-        run: ansible-galaxy collection install -r requirements.yml
+      - name: Install sops
+        run: |
+          sudo curl -sSLo /usr/local/bin/sops https://github.com/getsops/sops/releases/download/v3.10.2/sops-v3.10.2.linux.amd64
+          sudo chmod +x /usr/local/bin/sops
 
-      - name: Configure SSH
+      - name: Write SSH key
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy
           chmod 600 ~/.ssh/deploy
-          yq '.host_key' inventory/host_vars/${{ inputs.host }}.yml >> ~/.ssh/known_hosts
 
-      - name: Write vault password
-        run: |
-          printf '%s' "${{ secrets.ANSIBLE_VAULT_PASSWORD }}" > /tmp/vault-pass
-          chmod 600 /tmp/vault-pass
-
-      - name: Run setup playbook
-        run: |
-          ansible-playbook setup.yml --limit "${{ inputs.host }}" --vault-password-file /tmp/vault-pass
+      - name: Run setup
+        env:
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+        run: uv run pyinfra inventory.py deploys/setup.py --limit "${{ inputs.host }}" -y

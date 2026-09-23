@@ -7,15 +7,10 @@ repos:
       - id: end-of-file-fixer
       - id: check-merge-conflict
       - id: check-yaml
-        args: [--allow-multiple-documents]
-        exclude: inventory/group_vars/servers/vault\.yml
+        exclude: secrets\.sops\.yaml
 
-  - repo: https://github.com/adrienverge/yamllint
-    rev: v1.35.1
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.13.0
     hooks:
-      - id: yamllint
-
-  - repo: https://github.com/ansible/ansible-lint
-    rev: v26.8.0
-    hooks:
-      - id: ansible-lint
+      - id: ruff-check
+      - id: ruff-format

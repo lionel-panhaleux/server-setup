@@ -28,24 +28,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Install Ansible
-        run: pip install ansible
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
 
-      - name: Install Ansible collections
-        run: ansible-galaxy collection install -r requirements.yml
-
-      - name: Configure SSH
+      - name: Write SSH key
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy
           chmod 600 ~/.ssh/deploy
-          yq '.host_key' inventory/host_vars/${{ inputs.host }}.yml >> ~/.ssh/known_hosts
 
-      - name: Write vault password
-        run: |
-          printf '%s' "${{ secrets.ANSIBLE_VAULT_PASSWORD }}" > /tmp/vault-pass
-          chmod 600 /tmp/vault-pass
-
-      - name: Run upgrade playbook
-        run: |
-          ansible-playbook upgrade.yml --limit "${{ inputs.host }}" -e confirm=${{ inputs.confirm }} --vault-password-file /tmp/vault-pass
+      - name: Run upgrade
+        env:
+          CONFIRM: ${{ inputs.confirm && '1' || '' }}
+        run: uv run pyinfra inventory.py deploys/upgrade.py --limit "${{ inputs.host }}" -y

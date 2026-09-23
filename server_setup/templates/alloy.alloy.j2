@@ -1,0 +1,115 @@
+// Managed by server-setup. Do not edit by hand.
+// Rendered from server_setup/templates/alloy.alloy.j2 by server_setup.observability.
+
+// ---- System metrics (CPU / mem / disk / network / systemd units) ----
+prometheus.exporter.unix "node" {
+  include_exporter_metrics = true
+}
+
+// Override the scrape target's `instance` label to the inventory hostname so
+// integration dashboards can filter by host cleanly (default would be
+// 127.0.0.1:9100 — identical on every host).
+discovery.relabel "node" {
+  targets = prometheus.exporter.unix.node.targets
+  rule {
+    target_label = "instance"
+    replacement  = "{{ host_name }}"
+  }
+}
+
+prometheus.scrape "node" {
+  job_name        = "integrations/node_exporter"
+  targets         = discovery.relabel.node.output
+  forward_to      = [prometheus.remote_write.grafana_cloud.receiver]
+  scrape_interval = "60s"
+}
+
+// ---- Postgres metrics (peer auth via Unix socket, OS user `alloy`) ----
+prometheus.exporter.postgres "pg" {
+  data_source_names = ["postgresql:///postgres?host=/var/run/postgresql&sslmode=disable"]
+}
+
+discovery.relabel "pg" {
+  targets = prometheus.exporter.postgres.pg.targets
+  rule {
+    target_label = "instance"
+    replacement  = "{{ host_name }}"
+  }
+}
+
+prometheus.scrape "pg" {
+  job_name        = "integrations/postgres_exporter"
+  targets         = discovery.relabel.pg.output
+  forward_to      = [prometheus.remote_write.grafana_cloud.receiver]
+  scrape_interval = "60s"
+}
+
+// ---- Metrics -> Grafana Cloud Prometheus ----
+prometheus.remote_write "grafana_cloud" {
+  external_labels = {
+    cluster = "krcg-servers",
+    host    = "{{ host_name }}",
+  }
+  endpoint {
+    url = "https://prometheus-prod-65-prod-eu-west-2.grafana.net/api/prom/push"
+    basic_auth {
+      username = sys.env("GC_PROM_USER")
+      password = sys.env("GC_PROM_PASSWORD")
+    }
+  }
+}
+
+// ---- Journald source with per-app label extraction ----
+// `__journal_syslog_identifier` -> `tag` matches the SyslogIdentifier
+// convention (journalctl -t <tag>) so dashboards filter by service.
+loki.relabel "journal" {
+  forward_to = []
+  rule {
+    source_labels = ["__journal__systemd_unit"]
+    target_label  = "unit"
+  }
+  rule {
+    source_labels = ["__journal_syslog_identifier"]
+    target_label  = "tag"
+  }
+  rule {
+    source_labels = ["__journal_priority_keyword"]
+    target_label  = "level"
+  }
+  rule {
+    source_labels = ["__journal__hostname"]
+    target_label  = "hostname"
+  }
+  rule {
+    source_labels = ["__journal__boot_id"]
+    target_label  = "boot_id"
+  }
+  rule {
+    source_labels = ["__journal__transport"]
+    target_label  = "transport"
+  }
+}
+
+// No `path` argument — Alloy defaults to both /var/log/journal and
+// /run/log/journal, so early-boot entries aren't missed.
+loki.source.journal "journal" {
+  max_age       = "12h"
+  relabel_rules = loki.relabel.journal.rules
+  labels        = {
+    job      = "integrations/node_exporter",
+    cluster  = "krcg-servers",
+    host     = "{{ host_name }}",
+  }
+  forward_to    = [loki.write.grafana_cloud.receiver]
+}
+
+// ---- Logs -> Grafana Cloud Loki ----
+loki.write "grafana_cloud" {
+  endpoint {
+    url = "https://logs-prod-012.grafana.net/loki/api/v1/push"
+    basic_auth {
+      username = sys.env("GC_LOKI_USER")
+      password = sys.env("GC_LOKI_PASSWORD")
+    }
+  }
+}

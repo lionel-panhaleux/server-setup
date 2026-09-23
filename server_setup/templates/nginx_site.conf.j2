@@ -1,0 +1,179 @@
+{% macro log_directives() -%}
+    access_log syslog:server=unix:/dev/log,tag={{ log_tag }},nohostname combined;
+    error_log  syslog:server=unix:/dev/log,tag={{ log_tag }},nohostname warn;
+{%- endmacro %}
+{% macro cors_block() -%}
+        add_header Access-Control-Allow-Origin  "*" always;
+        add_header Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS" always;
+        add_header Access-Control-Allow-Headers "Authorization, Content-Type" always;
+        add_header Access-Control-Max-Age       "86400" always;
+        if ($request_method = OPTIONS) { return 204; }
+{%- endmacro %}
+{% macro public_cors(pad="        ") %}
+{{ pad }}add_header Access-Control-Allow-Origin  "*" always;
+{{ pad }}add_header Access-Control-Allow-Methods "GET, HEAD, OPTIONS" always;
+{{ pad }}add_header Access-Control-Allow-Headers "*" always;
+{{ pad }}add_header Access-Control-Max-Age       "86400" always;
+{%- endmacro %}
+{# add_header is all-or-nothing per level: a location that sets Cache-Control
+   inherits no header from its server, so a public site's CORS goes along #}
+{% macro cache_control(value) %}
+        add_header Cache-Control "{{ value }}";
+{%- if public %}
+
+{{ public_cors() }}
+{%- endif %}
+{%- endmacro %}
+{% macro proxy_block() -%}
+        proxy_pass {{ upstream }};
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade           $http_upgrade;
+        proxy_set_header Connection        $connection_upgrade;
+        proxy_read_timeout 60s;
+{%- endmacro %}
+{% macro site_content() %}
+{% for path in open_api_paths %}
+    location {{ path }} {
+{{ cors_block() }}
+{% if type == "proxy" %}
+{{ proxy_block() }}
+{% else %}
+        root {{ root }};
+        try_files $uri $uri/ =404;
+{% endif %}
+    }
+{% endfor %}
+
+{% if public %}
+    # public files: read-only CORS on every response, errors included, and listings
+{{ public_cors("    ") }}
+    if ($request_method = OPTIONS) {
+        return 204;
+    }
+    autoindex on;
+    autoindex_exact_size off;
+
+{% endif %}
+{% if type == "static" %}
+    root {{ root }};
+    index index.html;
+    charset utf-8;
+
+    # file names don't change with their content: short lifetimes,
+    # a little longer for images and fonts
+    location ~* \.(?:jpg|jpeg|png|gif|svg|webp|avif|ico|woff2?|ttf|otf)$ {
+{{ cache_control("public, must-revalidate, max-age=3600") }}
+        try_files $uri =404;
+    }
+
+    location / {
+{{ cache_control("public, must-revalidate, max-age=300") }}
+        try_files $uri $uri/ =404;
+    }
+{% elif type == "spa" %}
+    root {{ root }};
+    index index.html;
+    charset utf-8;
+
+    # the build's hashed assets never change under their name
+    location /assets/ {
+{{ cache_control("public, max-age=31536000, immutable") }}
+        try_files $uri =404;
+    }
+
+    # the shell, the service worker and the icons keep their names across builds
+    location / {
+{{ cache_control("no-cache") }}
+        try_files $uri $uri/ /index.html;
+    }
+{% elif type == "proxy" %}
+{# "/" in open_api_paths already emitted the root location (with CORS) above #}
+{% if "/" not in open_api_paths %}
+    location / {
+{{ proxy_block() }}
+    }
+{% endif %}
+{% endif %}
+
+{{ extra_locations }}
+{%- endmacro %}
+
+# {{ site }} — managed by server-setup/nginx_site
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name {{ server_names }};
+
+{{ log_directives() }}
+    client_max_body_size {{ client_max_body_size }};
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+{% if public %}
+{# a public site serves port 80 exactly as it serves 443, without redirecting #}
+{{ site_content() }}
+{% else %}
+{% for path in plain_http_paths %}
+    location {{ path }} {
+{% if type == "proxy" %}
+{{ proxy_block() }}
+{% else %}
+        root {{ root }};
+        try_files $uri $uri/ =404;
+{% endif %}
+    }
+{% endfor %}
+
+{# "/" in plain_http_paths already emitted the root location above #}
+{% if "/" not in plain_http_paths %}
+{% if cert_exists %}
+    location / {
+        return 301 https://$host$request_uri;
+    }
+{% else %}
+    location / {
+        return 503 "TLS certificate not yet provisioned\n";
+    }
+{% endif %}
+{% endif %}
+{% endif %}
+}
+
+{% if cert_exists %}
+server {
+{% if modern_http2 %}
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+{% else %}
+{# nginx < 1.25.1 (Debian 12) predates the http2 directive #}
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+{% endif %}
+    server_name {{ server_names }};
+
+    ssl_certificate     /etc/letsencrypt/live/{{ domain }}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/{{ domain }}/privkey.pem;
+    # Self-contained SSL hardening. Do NOT include certbot's
+    # options-ssl-nginx.conf / ssl-dhparams.pem: those are installed only by the
+    # certbot *nginx* plugin, never by `certbot certonly --webroot` (the mode
+    # this role uses), so including them hard-fails `nginx -t` (missing file).
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:ssl_{{ site }}:10m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
+
+{{ log_directives() }}
+    client_max_body_size {{ client_max_body_size }};
+
+{{ site_content() }}
+}
+{% endif %}

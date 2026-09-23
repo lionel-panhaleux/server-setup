@@ -6,14 +6,14 @@ fleet got here is logged at the end, in [Fleet history](#fleet-history).
 
 ## Who deploys what
 
-This repo is the foundation, converged per host with `setup.yml` (the `Setup`
-workflow, or a laptop with the vault password): base packages, SSH hardening,
-UFW, nginx defaults (the websocket map, gzip, the certbot reload hook), the
-postgres cluster with its backup and verify timers, and observability. It also
-ships the `nginx_site` and `postgres_db` roles as the `lionel_panhaleux.server_setup`
-collection. Every app deploys from its own repo:
+This repo is the foundation, converged per host with `just setup <host>` (or the
+`Setup` workflow): base packages, SSH hardening, UFW, nginx defaults (the
+websocket map, gzip, the certbot reload hook), the postgres cluster with its
+backup and verify timers, and observability. It is also the `server_setup` Python
+package whose `nginx_site` and `postgres_db` deploys the apps call from their own
+pyinfra deploys. Every app deploys from its own repo:
 
-| Repo | Host | Playbook | Run by |
+| Repo | Host | Deploy | Run by |
 |---|---|---|---|
 | `krcg-api` | strasbourg | `deploy/` | CI on a published release, or `workflow_dispatch` |
 | `codex-of-the-damned` | strasbourg | `deploy/` | CI, `workflow_dispatch` only (after a PyPI release) |
@@ -25,14 +25,17 @@ collection. Every app deploys from its own repo:
 | `rulings-website` | gravelines | `ansible/` | `just deploy` |
 | `archon-vibe` | frankfurt | `ansible/` | its `just` recipes |
 
-Playbooks connect as `deploy`: CI with `DEPLOY_SSH_KEY`, `DEPLOY_HOST` and
+Deploys connect as `deploy`: CI with `DEPLOY_SSH_KEY`, `DEPLOY_HOST` and
 `DEPLOY_HOST_KEY`, which `just sync` / `just sync-key` push from
-`deploy-targets.yml`; a laptop with `~/.ssh/deploy`. `rulings-website` and
-`archon-vibe` are listed there too, but their playbooks only run from a laptop.
+`deploy_targets.py`; a laptop with `~/.ssh/deploy`. `rulings-website` and
+`archon-vibe` are listed there too, but their deploys only run from a laptop.
 
-The `static.krcg.org` and `lackey.krcg.org` files are not shipped by a playbook:
+The Ansible apps pin the `ansible-final` tag of this repo, the last release of
+the `lionel_panhaleux.server_setup` collection, until they move to pyinfra.
+
+The `static.krcg.org` and `lackey.krcg.org` files are not shipped by a deploy:
 their actions rsync them as `deploy`, without sudo, into `/var/www/static` and
-`/var/www/lackey`, which each repo's playbook creates owned by `deploy`. Lackey's
+`/var/www/lackey`, which each repo's deploy creates owned by `deploy`. Lackey's
 playtest plugins sit there in `<PLUGIN_UID>/` folders that exist **nowhere else**:
 each is deployed from its own playtest branch, and `make deploy` filters them out
 of its `--delete`.
@@ -49,7 +52,7 @@ of its `--delete`.
 - certbot's timer renews the files but does not reload nginx, which keeps serving
   the old certificate from memory — and expires on it if nothing reloads within
   30 days. `/etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh`, from
-  `tasks/base.yml`, does the reload. `archon-vibe`'s `nginx_tls` writes the same
+  `server_setup/files/reload-nginx.sh`, does the reload. `archon-vibe`'s `nginx_tls` writes the same
   path on frankfurt: **keep the two contents identical**, or each converge
   rewrites the other's.
 
@@ -60,7 +63,7 @@ renewal conf names — the one of the deploy that issued it:
 
 | written by | webroot |
 |---|---|
-| collection `nginx_site` | `/var/www/certbot` |
+| `nginx_site` | `/var/www/certbot` |
 | `archon-vibe` `nginx_tls` (frankfurt) | `/var/www/acme` |
 
 A certificate issued through another webroot keeps renewing there after its site
@@ -68,7 +71,7 @@ moves onto `nginx_site`: **the deploy succeeds, the site serves, and every
 unattended renewal 404s** until the cert expires. `nginx_site` reads its domain's
 renewal conf and, when it names another webroot, re-issues through its own with
 `--force-renewal` — but only when that site is deployed. It reads only its own
-`nginx_site_domain`, so it never touches `archon-vibe`'s certificates. To check a
+`domain`, so it never touches `archon-vibe`'s certificates. To check a
 host by hand, compare each `/etc/letsencrypt/renewal/<name>.conf`
 `[[webroot_map]]` against the `root` of the `acme-challenge` location nginx serves
 for that domain on port 80.
@@ -80,13 +83,13 @@ A site taking over a domain from another vhost must **remove that vhost before
 ## Postgres access lines
 
 `pg_hba.conf` carries `local <db> <user> scram-sha-256` lines, one per (user,
-database) pair, that no playbook in this repo writes — so a role can appear on
+database) pair, that nothing in this repo writes — so a role can appear on
 several lines, and **nothing removes a line when its database is dropped**. Edit
 them as in step 6 of [Retiring a service](#retiring-a-service--the-order-that-bites).
 
 ## Backup layout (restic)
 
-`files/pg-backup.sh` builds `RESTIC_REPOSITORY="$RESTIC_REPOSITORY_BASE/<dbname>"`
+`server_setup/files/pg-backup.sh` builds `RESTIC_REPOSITORY="$RESTIC_REPOSITORY_BASE/<dbname>"`
 — **one repo per database name, with no host segment**, and every host shares one
 bucket.
 
@@ -106,7 +109,7 @@ bucket.
 
 ## Retiring a service — the order that bites
 
-1. **Remove its entry from `deploy-targets.yml` first.** `just sync` and
+1. **Remove its entry from `deploy_targets.py` first.** `just sync` and
    `just sync-key` re-create each listed repo's GitHub environment and re-push
    `DEPLOY_HOST` / `DEPLOY_HOST_KEY` / `DEPLOY_SSH_KEY`. Deleting the environment
    while the line remains is silently undone by the next sync.
@@ -148,3 +151,4 @@ history: `krcg_gra` is gravelines, `krcg_sbg` strasbourg, `krcg_lim` frankfurt
 | 2026-09-14 | The app deploys drop their migration-only steps (the `myserver` vhost removals, `cleanup.yml`, cutover notes), and `krcg-static` stops trusting gravelines' host key. `myserver` is archived: `add-admin.yml` and `setup.yml` cover its bootstrap playbooks. |
 | 2026-09-14 | The `static.krcg.org` and `lackey.krcg.org` content moves from `/home/lpanhaleux/projects/<domain>/dist` to `/var/www/<site>`, rsynced as `deploy`; the `krcg_deploy` key and the `KRCG_*` secrets go. That key had been rsynced into lackey's site root: an unquoted `-e ssh -i <key>` made it a source file. |
 | 2026-09-15 | `krcg-bot`'s deploy stops passing `backup: true` on its token file and unit, a takeover-only safeguard for the inline token: a converge that changed either had left a timestamped `~` copy beside it, and the 4.10 deploy left one of the unit. |
+| 2026-09-23 | This repo moves from Ansible to pyinfra (2.0.0), its vault to sops. The collection's last release is tagged `ansible-final` for the apps still on Ansible. Frankfurt had not been converged since the `--group-by host` retention fix and the `grafana.asc` key; its first pyinfra run applies both. |
