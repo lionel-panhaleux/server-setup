@@ -18,6 +18,13 @@
   the role's `restore` and `restore-remote` task files.
 - `postgres_db` no longer requires a password: apps on the host log in by peer
   auth.
+- `nginx_site` hardening: HSTS (one year, this host only) and `nosniff` on every
+  response, repeated in each location that sets its own headers; Mozilla's
+  intermediate TLS ciphers; one shared session cache; `X-Forwarded-For` is the
+  client address instead of appending the chain the client sent. A whole-site
+  open API is refused on static and spa sites, which own `location /`.
+- Setup adds a catch-all default server: names no site serves get no site.
+- Every nginx reload is preceded by `nginx -t`.
 - Tests: molecule goes. Unit tests render every `nginx_site` variant and cover
   the certificate decisions; CI runs `nginx -t` over them and converges
   `postgres_db` on the runner.

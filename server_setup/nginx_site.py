@@ -54,6 +54,8 @@ def render_site(
         raise ValueError("nginx_site: a proxy site needs an upstream")
     if type != "proxy" and not root:
         raise ValueError("nginx_site: a static or spa site needs a root")
+    if type != "proxy" and "/" in open_api_paths:
+        raise ValueError("nginx_site: a whole-site open API needs a proxy site, the others own `location /`")
     if public and (type == "proxy" or plain_http_paths):
         raise ValueError("nginx_site: a public site serves files on both ports, with no plain_http_paths")
     # site becomes an nginx syslog tag, which rejects anything else with a cryptic parse error
@@ -131,6 +133,7 @@ def nginx_site(
         # the HTTP-01 challenge needs the port-80 server live before certbot runs
         http_only = files.put(name="Site config (HTTP only)", src=config(bool(sans)), dest=available, mode="644")
         link = files.link(name="Enable site", path=enabled, target=available)
+        server.shell(name="Validate nginx config", commands=["nginx -t"], _if=any_changed(http_only, link))
         systemd.service(name="Reload nginx", service="nginx", reloaded=True, _if=any_changed(http_only, link))
         changes.append(
             server.shell(
@@ -146,4 +149,6 @@ def nginx_site(
         )
     changes.append(files.put(name="Site config", src=config(True), dest=available, mode="644"))
     changes.append(files.link(name="Enable site", path=enabled, target=available))
+    # a reload with a broken config keeps serving the old one, and says so only in the journal
+    server.shell(name="Validate nginx config", commands=["nginx -t"], _if=any_changed(*changes))
     systemd.service(name="Reload nginx", service="nginx", reloaded=True, _if=any_changed(*changes))

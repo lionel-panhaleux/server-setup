@@ -85,8 +85,11 @@ def nginx():
         files.link(name="Remove default site", path="/etc/nginx/sites-enabled/default", present=False),
         _put("nginx-upgrade-map.conf", "/etc/nginx/conf.d/upgrade_map.conf"),
         _put("nginx-gzip.conf", "/etc/nginx/conf.d/gzip.conf"),
+        _put("nginx-default-server.conf", "/etc/nginx/conf.d/default_server.conf"),
     ]
     systemd.service(name="nginx", service="nginx", running=True, enabled=True)
+    # a reload with a broken config keeps serving the old one, and says so only in the journal
+    server.shell(name="Validate nginx config", commands=["nginx -t"], _if=any_changed(*nginx))
     systemd.service(name="Reload nginx", service="nginx", reloaded=True, _if=any_changed(*nginx))
     # certbot renews the files, but nginx serves the old certificate until it reloads
     _put("reload-nginx.sh", "/etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh", mode="755")

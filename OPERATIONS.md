@@ -46,9 +46,14 @@ of its `--delete`.
   it with a **symlink**; `archon-vibe` writes its own vhosts on frankfurt. A plain
   `<domain>.http.conf` / `<domain>.https.conf` file in `sites-enabled` comes from
   no current deploy.
+- `conf.d/default_server.conf` answers every name no site serves: port 80 closes
+  the connection (`444`), port 443 refuses the handshake. Without it nginx served
+  such requests from the first site it loaded, with that site's certificate.
+- `nginx_site` sites share one TLS session cache, `shared:SSL:10m`: a vhost that
+  declares the `SSL` zone with another size fails `nginx -t` for the whole host.
 - `conf.d/gzip.conf` sets every gzip setting **except `gzip on`**, which Debian's
-  `nginx.conf` already has: nginx refuses the directive twice, and the reload
-  handler does not run `nginx -t` first.
+  `nginx.conf` already has: nginx refuses the directive twice. The deploys run `nginx -t`
+  before every reload: a reload alone keeps serving the old config and only logs.
 - certbot's timer renews the files but does not reload nginx, which keeps serving
   the old certificate from memory — and expires on it if nothing reloads within
   30 days. `/etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh`, from

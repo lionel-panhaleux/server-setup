@@ -40,7 +40,7 @@ To add a recipient (a new admin, a CI key), add its public key to `.sops.yaml` a
 One ed25519 keypair per identity. Leave the deploy key without a passphrase (CI cannot type one); set one for admin keys.
 
 ```bash
-ssh-keygen -t ed25519 -f ~/.ssh/lpanhaleux -C "lpanhaleux@$(hostname)"
+ssh-keygen -t ed25519 -f ~/.ssh/alice -C "alice@$(hostname)"
 ssh-keygen -t ed25519 -f ~/.ssh/deploy     -C "deploy@server-setup" -N ""
 ```
 
@@ -50,8 +50,8 @@ Record its SSH key, then create the admin users as root:
 
 ```bash
 just add-host 1.2.3.4
-ADMIN=lpanhaleux ADMIN_KEY=~/.ssh/lpanhaleux.pub just add-admin 1.2.3.4
-ADMIN=deploy     ADMIN_KEY=~/.ssh/deploy.pub     just add-admin 1.2.3.4
+ADMIN=alice  ADMIN_KEY=~/.ssh/alice.pub  just add-admin 1.2.3.4
+ADMIN=deploy ADMIN_KEY=~/.ssh/deploy.pub just add-admin 1.2.3.4
 ```
 
 Then add it to `inventory.py`, commit `known_hosts`, and `just sync` so the apps' CI trusts the key too.
@@ -119,6 +119,8 @@ An nginx site with automatic Let's Encrypt issuance and journald logging:
 Options: `aliases` (more `server_name`s, on the certificate too), `cert_extra_domains` (on the certificate only), `open_api_paths` (path prefixes with permissive CORS; `("/",)` for the whole site), `plain_http_paths` (served over plain HTTP instead of redirecting), `client_max_body_size` (default `10m`), `extra_locations` (raw nginx appended to the HTTPS server).
 
 `public=True` (static or spa) is for files anyone may link to (`static.krcg.org`, `lackey.krcg.org`): every response carries read-only CORS, directories are listed, and port 80 serves the site exactly as 443 does, `extra_locations` included. An extra location with its own `add_header` inherits none from the server, so it must repeat the CORS headers.
+
+Every site sends `X-Content-Type-Options: nosniff`, and over HTTPS `Strict-Transport-Security: max-age=31536000` (this host only: no `includeSubDomains`, which would force HTTPS on plain-HTTP neighbours). The proxy passes the client address as `X-Forwarded-For`, never a chain the client sent. TLS follows Mozilla's intermediate profile.
 
 `site` must be alphanumeric or underscore: it names the config file and tags the site's logs.
 

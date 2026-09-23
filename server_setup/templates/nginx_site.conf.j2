@@ -1,12 +1,21 @@
-{% macro log_directives() -%}
+{% macro log_directives() %}
     access_log syslog:server=unix:/dev/log,tag={{ log_tag }},nohostname combined;
     error_log  syslog:server=unix:/dev/log,tag={{ log_tag }},nohostname warn;
 {%- endmacro %}
-{% macro cors_block() -%}
+{# add_header is all-or-nothing per level: a location that sets any header
+   inherits none from its server, so every such location repeats these #}
+{% macro security_headers(https, pad="        ") %}
+{% if https %}
+{{ pad }}add_header Strict-Transport-Security "max-age=31536000" always;
+{% endif %}
+{{ pad }}add_header X-Content-Type-Options    "nosniff" always;
+{%- endmacro %}
+{% macro cors_block(https) %}
         add_header Access-Control-Allow-Origin  "*" always;
         add_header Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS" always;
         add_header Access-Control-Allow-Headers "Authorization, Content-Type" always;
         add_header Access-Control-Max-Age       "86400" always;
+{{ security_headers(https) }}
         if ($request_method = OPTIONS) { return 204; }
 {%- endmacro %}
 {% macro public_cors(pad="        ") %}
@@ -15,30 +24,32 @@
 {{ pad }}add_header Access-Control-Allow-Headers "*" always;
 {{ pad }}add_header Access-Control-Max-Age       "86400" always;
 {%- endmacro %}
-{# add_header is all-or-nothing per level: a location that sets Cache-Control
-   inherits no header from its server, so a public site's CORS goes along #}
-{% macro cache_control(value) %}
+{% macro cache_control(value, https) %}
         add_header Cache-Control "{{ value }}";
+{{ security_headers(https) }}
 {%- if public %}
 
 {{ public_cors() }}
 {%- endif %}
 {%- endmacro %}
-{% macro proxy_block() -%}
+{% macro proxy_block() %}
         proxy_pass {{ upstream }};
         proxy_http_version 1.1;
         proxy_set_header Host              $host;
         proxy_set_header X-Real-IP         $remote_addr;
-        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        # nginx is the only hop: pass the client address, not a client-supplied chain
+        proxy_set_header X-Forwarded-For   $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header Upgrade           $http_upgrade;
         proxy_set_header Connection        $connection_upgrade;
         proxy_read_timeout 60s;
 {%- endmacro %}
-{% macro site_content() %}
+{% macro site_content(https) %}
+{{ security_headers(https, "    ") }}
 {% for path in open_api_paths %}
+
     location {{ path }} {
-{{ cors_block() }}
+{{ cors_block(https) }}
 {% if type == "proxy" %}
 {{ proxy_block() }}
 {% else %}
@@ -66,12 +77,12 @@
     # file names don't change with their content: short lifetimes,
     # a little longer for images and fonts
     location ~* \.(?:jpg|jpeg|png|gif|svg|webp|avif|ico|woff2?|ttf|otf)$ {
-{{ cache_control("public, must-revalidate, max-age=3600") }}
+{{ cache_control("public, must-revalidate, max-age=3600", https) }}
         try_files $uri =404;
     }
 
     location / {
-{{ cache_control("public, must-revalidate, max-age=300") }}
+{{ cache_control("public, must-revalidate, max-age=300", https) }}
         try_files $uri $uri/ =404;
     }
 {% elif type == "spa" %}
@@ -81,13 +92,13 @@
 
     # the build's hashed assets never change under their name
     location /assets/ {
-{{ cache_control("public, max-age=31536000, immutable") }}
+{{ cache_control("public, max-age=31536000, immutable", https) }}
         try_files $uri =404;
     }
 
     # the shell, the service worker and the icons keep their names across builds
     location / {
-{{ cache_control("no-cache") }}
+{{ cache_control("no-cache", https) }}
         try_files $uri $uri/ /index.html;
     }
 {% elif type == "proxy" %}
@@ -98,8 +109,10 @@
     }
 {% endif %}
 {% endif %}
+{% if extra_locations %}
 
-{{ extra_locations }}
+{{ extra_locations.rstrip() }}
+{% endif %}
 {%- endmacro %}
 
 # {{ site }} — managed by server-setup/nginx_site
@@ -118,7 +131,7 @@ server {
 
 {% if public %}
 {# a public site serves port 80 exactly as it serves 443, without redirecting #}
-{{ site_content() }}
+{{ site_content(false) }}
 {% else %}
 {% for path in plain_http_paths %}
     location {{ path }} {
@@ -161,19 +174,21 @@ server {
 
     ssl_certificate     /etc/letsencrypt/live/{{ domain }}/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/{{ domain }}/privkey.pem;
-    # Self-contained SSL hardening. Do NOT include certbot's
-    # options-ssl-nginx.conf / ssl-dhparams.pem: those are installed only by the
-    # certbot *nginx* plugin, never by `certbot certonly --webroot` (the mode
-    # this role uses), so including them hard-fails `nginx -t` (missing file).
+    # Self-contained SSL hardening (Mozilla "intermediate"). Do NOT include
+    # certbot's options-ssl-nginx.conf / ssl-dhparams.pem: only the certbot
+    # *nginx* plugin installs them, never `certbot certonly --webroot` (the mode
+    # used here), so including them hard-fails `nginx -t` (missing file).
     ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305;
     ssl_prefer_server_ciphers off;
-    ssl_session_cache shared:ssl_{{ site }}:10m;
+    # one cache for every site on the host: the zone must keep this exact name and size everywhere
+    ssl_session_cache shared:SSL:10m;
     ssl_session_timeout 1d;
     ssl_session_tickets off;
 
 {{ log_directives() }}
     client_max_body_size {{ client_max_body_size }};
 
-{{ site_content() }}
+{{ site_content(true) }}
 }
 {% endif %}

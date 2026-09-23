@@ -55,6 +55,36 @@ def test_spa_caches_only_its_hashed_assets_and_a_private_site_sends_no_cors():
     assert "Access-Control" not in conf
 
 
+def header_scopes(server: str) -> list[str]:
+    """The server's own headers, and each location that sets headers of its own
+    (and so inherits none from the server)."""
+    locations = [chunk.split("\n    }")[0] for chunk in server.split("\n    location ")[1:]]
+    return [re.sub(r"\n    location .*?\n    }", "", server, flags=re.DOTALL)] + [
+        body for body in locations if "add_header" in body
+    ]
+
+
+@pytest.mark.parametrize("name", SITES)
+def test_every_https_response_carries_the_security_headers(name):
+    http, https = render(name).split("listen 443")
+    assert "Strict-Transport-Security" not in http
+    for scope in header_scopes(https):
+        assert 'Strict-Transport-Security "max-age=31536000" always' in scope
+        assert 'X-Content-Type-Options    "nosniff" always' in scope
+
+
+def test_public_port_80_sends_nosniff_everywhere():
+    http = render("t_public").split("listen 443")[0]
+    for scope in header_scopes(http):
+        assert 'X-Content-Type-Options    "nosniff" always' in scope
+
+
+def test_proxy_passes_the_client_address_not_a_forwarded_chain():
+    conf = render("t_proxy")
+    assert "X-Forwarded-For   $remote_addr;" in conf
+    assert "$proxy_add_x_forwarded_for" not in conf
+
+
 def test_before_the_certificate_only_port_80_answers():
     conf = render("t_proxy", cert_exists=False)
     assert 'return 503 "TLS certificate not yet provisioned' in conf
@@ -75,6 +105,7 @@ def test_http2_directive_follows_the_nginx_version():
         {"type": "proxy", "upstream": ""},
         {"type": "static", "root": ""},
         {"type": "static", "root": "/srv", "public": True, "plain_http_paths": ("/",)},
+        {"type": "spa", "root": "/srv", "open_api_paths": ("/",)},
     ],
 )
 def test_inconsistent_inputs_fail(bad):
