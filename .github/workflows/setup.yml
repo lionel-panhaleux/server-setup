@@ -29,7 +29,7 @@ jobs:
 
       - name: Install sops
         run: |
-          sudo curl -sSLo /usr/local/bin/sops https://github.com/getsops/sops/releases/download/v3.10.2/sops-v3.10.2.linux.amd64
+          sudo curl -sSLo /usr/local/bin/sops https://github.com/getsops/sops/releases/download/v3.13.3/sops-v3.13.3.linux.amd64
           sudo chmod +x /usr/local/bin/sops
 
       - name: Write SSH key
@@ -39,6 +39,4 @@ jobs:
           chmod 600 ~/.ssh/deploy
 
       - name: Run setup
-        env:
-          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
-        run: uv run pyinfra inventory.py deploys/setup.py --limit "${{ inputs.host }}" -y
+        run: SOPS_AGE_SSH_PRIVATE_KEY_FILE="$HOME/.ssh/deploy" uv run pyinfra inventory.py deploys/setup.py --limit "${{ inputs.host }}" -y

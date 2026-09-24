@@ -1,6 +1,3 @@
-# sops' own default is ~/Library/Application Support/sops/age/keys.txt on macOS
-export SOPS_AGE_KEY_FILE := env("SOPS_AGE_KEY_FILE", home_directory() / ".config/sops/age/keys.txt")
-
 default:
     @just --list
 

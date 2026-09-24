@@ -8,7 +8,7 @@ Apps still on Ansible pin the `ansible-final` tag, the last release of the `lion
 
 ## Prerequisites
 
-- [uv](https://docs.astral.sh/uv/), [just](https://just.systems/), [sops](https://getsops.io/) and [age](https://age-encryption.org/)
+- [uv](https://docs.astral.sh/uv/), [just](https://just.systems/) and [sops](https://getsops.io/)
 - [gh](https://cli.github.com/), authenticated, for pushing deploy targets to GitHub
 - (optional) [pre-commit](https://pre-commit.com/) hooks: `pre-commit install` once per clone
 
@@ -17,7 +17,7 @@ Apps still on Ansible pin the `ansible-final` tag, the last release of the `lion
 ```
 inventory.py        hosts, and what differs between them
 known_hosts         each host's SSH key; every connection checks it strictly
-secrets.sops.yaml   encrypted secrets (sops + age, recipients in .sops.yaml)
+secrets.sops.yaml   encrypted secrets (sops, recipients in .sops.yaml)
 deploys/            setup.py, upgrade.py, add_admin.py
 server_setup/       the package: one module per concern, its files and templates
 deploy_targets.py   which repo deploys to which host
@@ -25,13 +25,13 @@ deploy_targets.py   which repo deploys to which host
 
 ## Secrets
 
-`secrets.sops.yaml` holds every secret, encrypted to the age keys in `.sops.yaml`. The `just` recipes point sops at `~/.config/sops/age/keys.txt` (on macOS sops would otherwise look in `~/Library/Application Support/sops/age/`); set `SOPS_AGE_KEY_FILE` or `SOPS_AGE_KEY` to use another. Edit it in place:
+`secrets.sops.yaml` holds every secret, encrypted to the SSH public keys in `.sops.yaml` (sops uses them as age recipients). sops decrypts with `~/.ssh/id_ed25519` by default; set `SOPS_AGE_SSH_PRIVATE_KEY_FILE` to use another key, such as `~/.ssh/deploy`. Edit it in place:
 
 ```bash
 just secrets
 ```
 
-To add a recipient (a new admin, a CI key), add its public key to `.sops.yaml` and run `sops updatekeys secrets.sops.yaml`.
+To add a recipient (a new admin), add its SSH public key to `.sops.yaml` and run `sops updatekeys secrets.sops.yaml`.
 
 ## Usage
 
@@ -86,7 +86,7 @@ just sync-key ~/.ssh/deploy # DEPLOY_SSH_KEY to every target
 
 ## GitHub Actions
 
-`setup.yml` and `upgrade.yml` run on `workflow_dispatch`, with the host as a dropdown. They read `DEPLOY_SSH_KEY` from the repo secrets and check host keys against the committed `known_hosts`. `setup.yml` also needs `SOPS_AGE_KEY`: the private key of an age identity listed in `.sops.yaml`.
+`setup.yml` and `upgrade.yml` run on `workflow_dispatch`, with the host as a dropdown. They read `DEPLOY_SSH_KEY` from the repo secrets and check host keys against the committed `known_hosts`. `setup.yml` decrypts the secrets with that same key, which `.sops.yaml` lists as the `deploy` recipient.
 
 `test.yml` lints, runs the unit tests, has the runner's nginx accept every `nginx_site` variant (`nginx -t`), checks the hardened `sshd_config`, and converges `postgres_db` twice on the runner itself.
 

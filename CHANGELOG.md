@@ -6,8 +6,9 @@
   import `nginx_site` and `postgres_db` from a pinned git tag instead of
   installing the collection. `ansible-final` tags the collection's last release
   (1.0.13) for the apps still on Ansible.
-- sops + age replace ansible-vault: `secrets.sops.yaml`, recipients in
-  `.sops.yaml`, `just secrets` to edit. Keys lose their `vault_` prefix.
+- sops replaces ansible-vault: `secrets.sops.yaml`, encrypted to the SSH keys
+  listed in `.sops.yaml`, `just secrets` to edit. Keys lose their `vault_`
+  prefix.
 - Host keys live in a committed `known_hosts` that every connection checks
   strictly; setup no longer writes them back into the inventory.
 - The postgres backup units are static files: the local directory, retention
