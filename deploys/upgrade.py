@@ -11,7 +11,7 @@ name, current = distribution["name"], distribution["release_meta"]["VERSION_CODE
 
 if name == "Ubuntu":
     check = host.get_fact(Command, "do-release-upgrade -c 2>&1 || true")
-    found = re.search(r"New release '([^']+)'", check)
+    found = re.search(r"New release '([^']+)'", check or "")
     target = found.group(1) if found else current
 else:
     release = urllib.request.urlopen("https://deb.debian.org/debian/dists/stable/Release").read().decode()

@@ -23,7 +23,7 @@ def postgres_logging():
     # Read before this run installs postgresql: a fresh box gets these on its second run
     confd = host.get_fact(Command, "find /etc/postgresql -type d -name conf.d 2>/dev/null || true", _sudo=True)
     changes = []
-    for directory in confd.splitlines():
+    for directory in (confd or "").splitlines():
         for dest, src in (
             ("50-log-prefix.conf", "postgres-log-prefix.conf"),
             ("51-log-queries.conf", "postgres-log-queries.conf"),
