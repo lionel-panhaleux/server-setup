@@ -1,4 +1,4 @@
-# server-setup
+![server-setup](assets/banner.webp)
 
 [![Test](https://github.com/lionel-panhaleux/server-setup/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/lionel-panhaleux/server-setup/actions/workflows/test.yml)
 
