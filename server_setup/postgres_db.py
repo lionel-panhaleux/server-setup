@@ -13,7 +13,8 @@ def _settings(database: str) -> dict[str, str]:
         f"ON d.oid = s.setdatabase WHERE d.datname = '{database}' AND s.setrole = 0\" 2>/dev/null || true",
         **AS_POSTGRES,
     )
-    return dict(line.split("=", 1) for line in out.splitlines() if "=" in line)
+    # the Command fact is None on empty output: a new database has no settings yet
+    return dict(line.split("=", 1) for line in (out or "").splitlines() if "=" in line)
 
 
 # An app on the same host logs in over the unix socket by peer auth: no password.
