@@ -31,6 +31,12 @@
   server, so `nginx_site` no longer writes an HTTP-only config first (and no
   longer answers 503 while waiting for the certificate).
 - Every nginx reload is preceded by `nginx -t`.
+- What differs between fleets is a parameter, with this fleet's values as
+  defaults: `packages(postgres_version=)` installs that major from PGDG instead
+  of the unversioned package, `postgres_config(settings=)` (formerly
+  `postgres_logging`) writes server settings to `60-settings.conf`,
+  `services(journal_max_use=)`, and `observability(prom_url=, loki_url=)`.
+- `upgrade()` is importable, for fleets run from another repo.
 - Tests: molecule goes. Unit tests render every `nginx_site` variant and cover
   the certificate decisions; CI runs `nginx -t` over them and converges
   `postgres_db` on the runner.

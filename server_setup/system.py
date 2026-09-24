@@ -1,10 +1,11 @@
 import re
+from io import StringIO
 from pathlib import Path
 
 from pyinfra import host
 from pyinfra.api import deploy
 from pyinfra.facts.files import File
-from pyinfra.facts.server import Arch, Command
+from pyinfra.facts.server import Arch, Command, LinuxDistribution
 from pyinfra.operations import apt, files, server, systemd
 from pyinfra.operations.util import any_changed
 
@@ -22,8 +23,6 @@ PACKAGES = [
     "python3-venv",
     "python3-dev",
     "python3-pip",
-    "postgresql",
-    "postgresql-client",
     "libpq-dev",
     "python3-psycopg2",
     "gcc",
@@ -42,10 +41,35 @@ def _put(name: str, dest: str, mode: str = "644"):
 
 
 @deploy("Packages")
-def packages():
+def packages(postgres_version: str | None = None):
+    """postgres_version installs that major from the PGDG repo. With PGDG configured,
+    the unversioned `postgresql` package pulls PGDG's newest major: a second cluster."""
+    postgres = ["postgresql", "postgresql-client"]
+    if postgres_version:
+        codename = host.get_fact(LinuxDistribution)["release_meta"]["VERSION_CODENAME"]
+        key = files.download(
+            name="PGDG apt key",
+            src="https://www.postgresql.org/media/keys/ACCC4CF8.asc",
+            dest="/etc/apt/keyrings/postgresql.asc",
+            mode="644",
+        )
+        repo = files.put(
+            name="PGDG apt repo",
+            src=StringIO(
+                "Types: deb\n"
+                "URIs: https://apt.postgresql.org/pub/repos/apt\n"
+                f"Suites: {codename}-pgdg\n"
+                "Components: main\n"
+                "Signed-By: /etc/apt/keyrings/postgresql.asc\n"
+            ),
+            dest="/etc/apt/sources.list.d/pgdg.sources",
+            mode="644",
+        )
+        apt.update(name="Refresh apt for PGDG", _if=any_changed(key, repo))
+        postgres = [f"postgresql-{postgres_version}", f"postgresql-client-{postgres_version}"]
     apt.update(cache_time=3600)
     apt.dist_upgrade()
-    apt.packages(name="Base packages", packages=PACKAGES)
+    apt.packages(name="Base packages", packages=[*PACKAGES, *postgres])
     _put("20auto-upgrades", "/etc/apt/apt.conf.d/20auto-upgrades")
     if not host.get_fact(File, path="/usr/local/bin/uv"):
         server.shell(
@@ -62,14 +86,25 @@ def packages():
 
 
 @deploy("Services")
-def services():
+def services(journal_max_use: str = "2G"):
     jail = _put("jail.local", "/etc/fail2ban/jail.local")
     systemd.service(name="fail2ban", service="fail2ban", running=True, enabled=True)
     systemd.service(name="Restart fail2ban", service="fail2ban", restarted=True, _if=jail.did_change)
 
     journald = [
         files.directory(name="journald drop-in dir", path="/etc/systemd/journald.conf.d"),
-        _put("journald.conf", "/etc/systemd/journald.conf.d/00-server-setup.conf"),
+        files.put(
+            name="Install /etc/systemd/journald.conf.d/00-server-setup.conf",
+            src=StringIO(
+                "# Managed by server-setup.\n"
+                "[Journal]\n"
+                "Storage=persistent\n"
+                f"SystemMaxUse={journal_max_use}\n"
+                "SystemKeepFree=500M\n"
+            ),
+            dest="/etc/systemd/journald.conf.d/00-server-setup.conf",
+            mode="644",
+        ),
     ]
     systemd.service(name="Restart journald", service="systemd-journald", restarted=True, _if=any_changed(*journald))
 

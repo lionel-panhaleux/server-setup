@@ -14,7 +14,7 @@ s.nginx()
 s.ssh()
 s.firewall()
 s.swap()
-s.postgres_logging()
+s.postgres_config()
 s.postgres_backups(
     access_key=secrets["remote_backup_access_key"],
     secret_key=secrets["remote_backup_secret_key"],

@@ -18,8 +18,11 @@ UNITS = (
 )
 
 
-@deploy("Postgres logging")
-def postgres_logging():
+@deploy("Postgres config")
+def postgres_config(settings: dict[str, str] | None = None):
+    """Logging, plus `settings` (e.g. shared_buffers) in 60-settings.conf. A value set
+    with ALTER SYSTEM lives in postgresql.auto.conf, which is read last and wins."""
+    settings_conf = "# Managed by server-setup.\n" + "".join(f"{k} = '{v}'\n" for k, v in (settings or {}).items())
     # Read before this run installs postgresql: a fresh box gets these on its second run
     confd = host.get_fact(Command, "find /etc/postgresql -type d -name conf.d 2>/dev/null || true", _sudo=True)
     changes = []
@@ -30,6 +33,11 @@ def postgres_logging():
         ):
             path = f"{directory}/{dest}"
             changes.append(files.put(name=f"Install {path}", src=str(FILES / src), dest=path, mode="644"))
+        path = f"{directory}/60-settings.conf"
+        if settings:
+            changes.append(files.put(name=f"Install {path}", src=StringIO(settings_conf), dest=path, mode="644"))
+        else:
+            changes.append(files.file(name=f"No {path}", path=path, present=False))
     systemd.service(name="Restart postgresql", service="postgresql", restarted=True, _if=any_changed(*changes))
 
 

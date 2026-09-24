@@ -16,7 +16,14 @@ AS_POSTGRES = {"_sudo": True, "_sudo_user": "postgres"}
 # Grafana Alloy ships node + postgres metrics and the journal to Grafana Cloud.
 # It pushes outbound, so no firewall port opens for it.
 @deploy("Observability")
-def observability(prom_user: str, prom_password: str, loki_user: str, loki_password: str):
+def observability(
+    prom_user: str,
+    prom_password: str,
+    loki_user: str,
+    loki_password: str,
+    prom_url: str = "https://prometheus-prod-65-prod-eu-west-2.grafana.net/api/prom/push",
+    loki_url: str = "https://logs-prod-012.grafana.net/loki/api/v1/push",
+):
     # apt reads an armored key from signed-by= only when the file is named *.asc
     key = files.download(
         name="Grafana apt key", src="https://apt.grafana.com/gpg.key", dest="/etc/apt/keyrings/grafana.asc", mode="644"
@@ -59,6 +66,8 @@ def observability(prom_user: str, prom_password: str, loki_user: str, loki_passw
             group="alloy",
             mode="640",
             host_name=host.name,
+            prom_url=prom_url,
+            loki_url=loki_url,
         ),
     ]
 
