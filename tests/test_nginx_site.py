@@ -1,4 +1,5 @@
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -142,5 +143,6 @@ def test_certificate_names_read_the_san_extension():
 # CI renders every site into the runner's nginx and runs `nginx -t` over them
 if __name__ == "__main__":
     out = Path(sys.argv[1])
+    nginx_version = subprocess.run(["nginx", "-v"], capture_output=True, text=True, check=True).stderr
     for name in SITES:
-        (out / f"{name}.conf").write_text(render(name))
+        (out / f"{name}.conf").write_text(render(name, modern_http2=modern_http2(nginx_version)))
