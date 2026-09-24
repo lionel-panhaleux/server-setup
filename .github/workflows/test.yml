@@ -52,7 +52,9 @@ jobs:
           if curl -s -H 'Host: new.test' http://127.0.0.1/; then exit 1; fi
 
       - name: sshd accepts the hardened config
-        run: sudo sshd -t -f server_setup/files/sshd_config
+        run: |
+          sudo mkdir -p /run/sshd
+          sudo sshd -t -f server_setup/files/sshd_config
 
       - name: postgres_db converges, twice
         run: |
