@@ -4,6 +4,11 @@
 // ---- System metrics (CPU / mem / disk / network / systemd units) ----
 prometheus.exporter.unix "node" {
   include_exporter_metrics = true
+
+  // node_reboot_required, written by reboot-required-metric.timer
+  textfile {
+    directory = "/var/lib/alloy/textfile"
+  }
 }
 
 // Override the scrape target's `instance` label to the inventory hostname so
@@ -47,7 +52,7 @@ prometheus.scrape "pg" {
 // ---- Metrics -> Grafana Cloud Prometheus ----
 prometheus.remote_write "grafana_cloud" {
   external_labels = {
-    cluster = "krcg-servers",
+    cluster = "{{ cluster }}",
     host    = "{{ host_name }}",
   }
   endpoint {
@@ -97,7 +102,7 @@ loki.source.journal "journal" {
   relabel_rules = loki.relabel.journal.rules
   labels        = {
     job      = "integrations/node_exporter",
-    cluster  = "krcg-servers",
+    cluster  = "{{ cluster }}",
     host     = "{{ host_name }}",
   }
   forward_to    = [loki.write.grafana_cloud.receiver]

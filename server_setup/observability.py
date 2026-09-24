@@ -23,6 +23,7 @@ def observability(
     loki_password: str,
     prom_url: str = "https://prometheus-prod-65-prod-eu-west-2.grafana.net/api/prom/push",
     loki_url: str = "https://logs-prod-012.grafana.net/loki/api/v1/push",
+    cluster: str = "krcg-servers",
 ):
     # apt reads an armored key from signed-by= only when the file is named *.asc
     key = files.download(
@@ -68,6 +69,7 @@ def observability(
             host_name=host.name,
             prom_url=prom_url,
             loki_url=loki_url,
+            cluster=cluster,
         ),
     ]
 
@@ -86,3 +88,16 @@ def observability(
     systemd.daemon_reload(_if=changes[1].did_change)
     systemd.service(name="alloy", service="alloy", running=True, enabled=True)
     systemd.service(name="Restart alloy", service="alloy", restarted=True, _if=any_changed(*changes))
+
+    # unattended-upgrades installs kernels but never reboots: tournaments run in every time zone
+    files.directory(name="Alloy textfile dir", path="/var/lib/alloy/textfile", mode="755")
+    units = [
+        files.put(
+            name=f"Install {unit}", src=str(HERE / "files" / unit), dest=f"/etc/systemd/system/{unit}", mode="644"
+        )
+        for unit in ("reboot-required-metric.service", "reboot-required-metric.timer")
+    ]
+    systemd.daemon_reload(name="Reload units for the reboot metric", _if=any_changed(*units))
+    systemd.service(
+        name="reboot-required-metric.timer", service="reboot-required-metric.timer", running=True, enabled=True
+    )

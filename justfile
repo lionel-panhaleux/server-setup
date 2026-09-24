@@ -9,6 +9,14 @@ setup target *flags:
 upgrade target:
     uv run pyinfra inventory.py deploys/upgrade.py --limit {{ target }} -y
 
+# Reboot a host if a kernel or system update needs it (FORCE=1 reboots anyway), then check every unit came back
+reboot target:
+    uv run pyinfra inventory.py deploys/reboot.py --limit {{ target }} -y
+
+# Postgres major upgrade, UNTESTED: reports, CONFIRM=1 migrates, CONFIRM=1 DROP_OLD=1 drops the old cluster
+pg-upgrade target:
+    uv run pyinfra inventory.py deploys/postgres_upgrade.py --limit {{ target }} -y
+
 # Record a new host's SSH key before anything first connects to it
 add-host ip:
     ssh-keyscan -t ed25519 {{ ip }} | grep -v '^#' >> known_hosts

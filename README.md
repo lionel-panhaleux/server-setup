@@ -67,7 +67,7 @@ just setup frankfurt --dry      # only shows
 just setup servers              # every host
 ```
 
-Setup disables root SSH login. A run that ends with `REBOOT REQUIRED` needs a reboot: `ssh HOST sudo systemctl reboot`.
+Setup disables root SSH login. A run that ends with `REBOOT REQUIRED` needs a reboot (see 5).
 
 A fresh box needs a second run: postgres logging is configured from the `conf.d` directory, which only exists once the first run has installed postgresql.
 
@@ -77,6 +77,28 @@ A fresh box needs a second run: postgres logging is configured from the `conf.d`
 just upgrade frankfurt              # reports the release available
 CONFIRM=1 just upgrade frankfurt    # upgrades and reboots
 ```
+
+### 5. Kernel reboot
+
+unattended-upgrades installs security updates, kernels included, but never reboots: tournaments run in every time zone, so no hour is safe to pick blindly. Each host exports `node_reboot_required` (1 while a reboot is pending) to Grafana, refreshed hourly; alert on it and reboot when convenient:
+
+```bash
+just reboot frankfurt               # reboots only if required, then checks every unit came back
+FORCE=1 just reboot frankfurt       # reboots anyway
+```
+
+### 6. Postgres major upgrade (untested)
+
+A new major arrives with a distro upgrade on Debian's packages, or with a new `packages(postgres_version=)` on PGDG. Either way the package creates an empty `NEW/main` on port 5433 beside the running `OLD/main`, and nothing migrates until:
+
+```bash
+just pg-upgrade frankfurt                       # reports what it would do
+CONFIRM=1 just pg-upgrade frankfurt             # backs up, drops the empty NEW/main, pg_upgradecluster OLD main
+just setup frankfurt                            # writes the new cluster's conf.d
+CONFIRM=1 DROP_OLD=1 just pg-upgrade frankfurt  # once the apps are checked: drops OLD/main and its packages
+```
+
+`pg_upgradecluster` runs in dump mode: the apps are down for the dump and restore, and `OLD/main` stays intact on 5433, so until `DROP_OLD` the rollback is to stop `NEW/main` and start `OLD/main`. **This runbook has never run**: read it against `server_setup/maintenance.py` before the first use.
 
 ## Deploy targets
 
@@ -177,9 +199,10 @@ Both scripts ping a [healthchecks.io](https://healthchecks.io)-style URL: `GET <
 
 - node metrics (CPU, memory, disk, network, systemd units) via `prometheus.exporter.unix`
 - postgres metrics via `prometheus.exporter.postgres`, as an `alloy` role with `pg_monitor` over the unix socket (peer auth, no password)
+- `node_reboot_required`, through the textfile collector from `reboot-required-metric.timer`
 - the journal via `loki.source.journal`, with `SYSLOG_IDENTIFIER` as the `tag` label so dashboards filter by service (`{tag="krcg"}`)
 
-The push URLs are in `server_setup/templates/alloy.alloy.j2`. The secrets: `grafana_cloud_prom_user` and `grafana_cloud_loki_user` (the numeric instance IDs from the stack's Details page) and `grafana_cloud_prom_password` / `grafana_cloud_loki_password` (one Access Policy token with `metrics:write` and `logs:write`, used for both).
+The push URLs and the `cluster` label default to this fleet's stack; `observability()` takes others. The secrets: `grafana_cloud_prom_user` and `grafana_cloud_loki_user` (the numeric instance IDs from the stack's Details page) and `grafana_cloud_prom_password` / `grafana_cloud_loki_password` (one Access Policy token with `metrics:write` and `logs:write`, used for both).
 
 Sanity-check on a host:
 

@@ -1,0 +1,10 @@
+[Unit]
+Description=Refresh node_reboot_required hourly, and right after boot
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1h
+Unit=reboot-required-metric.service
+
+[Install]
+WantedBy=timers.target

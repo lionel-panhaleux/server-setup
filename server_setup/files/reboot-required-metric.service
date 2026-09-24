@@ -1,0 +1,6 @@
+[Unit]
+Description=Export node_reboot_required for Alloy's textfile collector
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'v=0; [ -f /run/reboot-required ] && v=1; echo "node_reboot_required $v" > /var/lib/alloy/textfile/reboot_required.prom.tmp && mv /var/lib/alloy/textfile/reboot_required.prom.tmp /var/lib/alloy/textfile/reboot_required.prom'

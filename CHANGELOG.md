@@ -36,7 +36,10 @@
   of the unversioned package, `postgres_config(settings=)` (formerly
   `postgres_logging`) writes server settings to `60-settings.conf`,
   `services(journal_max_use=)`, and `observability(prom_url=, loki_url=)`.
-- `upgrade()` is importable, for fleets run from another repo.
+- `upgrade()` is importable, for fleets run from another repo, beside
+  `reboot()` (`just reboot`: only when required, then checks every unit came
+  back) and `postgres_upgrade()` (`just pg-upgrade`, untested).
+- Hosts export `node_reboot_required` to Grafana: nothing reboots on its own.
 - Tests: molecule goes. Unit tests render every `nginx_site` variant and cover
   the certificate decisions; CI runs `nginx -t` over them and converges
   `postgres_db` on the runner.
