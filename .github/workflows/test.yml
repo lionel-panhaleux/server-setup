@@ -43,6 +43,14 @@ jobs:
           done
           sudo nginx -t
 
+      - name: The default server answers ACME challenges only
+        run: |
+          sudo systemctl restart nginx
+          sudo mkdir -p /var/www/certbot/.well-known/acme-challenge
+          echo token | sudo tee /var/www/certbot/.well-known/acme-challenge/t
+          test "$(curl -s -H 'Host: new.test' http://127.0.0.1/.well-known/acme-challenge/t)" = token
+          if curl -s -H 'Host: new.test' http://127.0.0.1/; then exit 1; fi
+
       - name: sshd accepts the hardened config
         run: sudo sshd -t -f server_setup/files/sshd_config
 

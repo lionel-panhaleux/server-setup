@@ -3,7 +3,7 @@
 ## 2.0.0
 
 - pyinfra replaces Ansible. The repo is the `server_setup` Python package: apps
-  import `nginx_site` and `postgres_db` from a pinned git tag instead of
+  import `nginx_site`, `certificate` and `postgres_db` from a pinned git tag instead of
   installing the collection. `ansible-final` tags the collection's last release
   (1.0.13) for the apps still on Ansible.
 - sops replaces ansible-vault: `secrets.sops.yaml`, encrypted to the SSH keys
@@ -24,7 +24,12 @@
   intermediate TLS ciphers; one shared session cache; `X-Forwarded-For` is the
   client address instead of appending the chain the client sent. A whole-site
   open API is refused on static and spa sites, which own `location /`.
-- Setup adds a catch-all default server: names no site serves get no site.
+- Setup adds a catch-all default server: names no site serves get no site. Its
+  port 80 answers ACME challenges.
+- `certificate(domain, extra_domains)` is its own deploy, for apps that write
+  their own vhosts. It issues before any site config exists, through the default
+  server, so `nginx_site` no longer writes an HTTP-only config first (and no
+  longer answers 503 while waiting for the certificate).
 - Every nginx reload is preceded by `nginx -t`.
 - Tests: molecule goes. Unit tests render every `nginx_site` variant and cover
   the certificate decisions; CI runs `nginx -t` over them and converges

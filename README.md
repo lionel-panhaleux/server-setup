@@ -131,6 +131,10 @@ Every site sends `X-Content-Type-Options: nosniff`, and over HTTPS `Strict-Trans
 journalctl -t krcg_api -f
 ```
 
+### `certificate`
+
+A Let's Encrypt certificate for an app that writes its own vhosts: `certificate("archon.krcg.org", ("www.archon.krcg.org",))`, then put the vhost. It issues only when the certificate is missing, lacks a name, or renews through another webroot, and reloads nginx afterwards. Until a site claims a name, the host's default server answers its HTTP-01 challenge; afterwards, renewals need the site's own port-80 server to keep serving `/.well-known/acme-challenge/` from `/var/www/certbot`.
+
 ### `postgres_db`
 
 A database and its owning role, with web-app timeouts: `statement_timeout=15s`, `idle_in_transaction_session_timeout=60s`, `lock_timeout=5s` (override per app, or per transaction with `SET LOCAL statement_timeout = '10min'` for batch jobs). Apps on the same host log in over the unix socket by peer auth, so `password` is optional. The cluster-wide backup picks the database up on its next run.

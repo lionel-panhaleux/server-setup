@@ -146,20 +146,13 @@ server {
 
 {# "/" in plain_http_paths already emitted the root location above #}
 {% if "/" not in plain_http_paths %}
-{% if cert_exists %}
     location / {
         return 301 https://$host$request_uri;
     }
-{% else %}
-    location / {
-        return 503 "TLS certificate not yet provisioned\n";
-    }
-{% endif %}
 {% endif %}
 {% endif %}
 }
 
-{% if cert_exists %}
 server {
 {% if modern_http2 %}
     listen 443 ssl;
@@ -191,4 +184,3 @@ server {
 
 {{ site_content(true) }}
 }
-{% endif %}

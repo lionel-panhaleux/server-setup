@@ -49,6 +49,10 @@ of its `--delete`.
 - `conf.d/default_server.conf` answers every name no site serves: port 80 closes
   the connection (`444`), port 443 refuses the handshake. Without it nginx served
   such requests from the first site it loaded, with that site's certificate.
+  Its port 80 also serves `/.well-known/acme-challenge/` from `/var/www/certbot`:
+  `certificate()` issues before the site's config exists, so the challenge for a
+  new name lands there. A deploy that issues certificates therefore needs setup to
+  have run on the host first.
 - `nginx_site` sites share one TLS session cache, `shared:SSL:10m`: a vhost that
   declares the `SSL` zone with another size fails `nginx -t` for the whole host.
 - `conf.d/gzip.conf` sets every gzip setting **except `gzip on`**, which Debian's

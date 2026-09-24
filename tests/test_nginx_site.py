@@ -4,7 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from server_setup.nginx_site import certificate_names, modern_http2, render_site, renewal_is_stale
+from server_setup.certificate import certificate_names, renewal_is_stale
+from server_setup.nginx_site import modern_http2, render_site
 
 SITES = {
     "t_static": {"domain": "static.test", "type": "static", "root": "/srv/site"},
@@ -83,12 +84,6 @@ def test_proxy_passes_the_client_address_not_a_forwarded_chain():
     conf = render("t_proxy")
     assert "X-Forwarded-For   $remote_addr;" in conf
     assert "$proxy_add_x_forwarded_for" not in conf
-
-
-def test_before_the_certificate_only_port_80_answers():
-    conf = render("t_proxy", cert_exists=False)
-    assert 'return 503 "TLS certificate not yet provisioned' in conf
-    assert "listen 443" not in conf
 
 
 def test_http2_directive_follows_the_nginx_version():
