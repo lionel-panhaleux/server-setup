@@ -19,7 +19,7 @@ inventory.py        hosts, and what differs between them
 group_data/all.py   how every host is reached: deploy user and key, known_hosts, sudo
 known_hosts         each host's SSH key; every connection checks it strictly
 secrets.sops.yaml   encrypted secrets (sops, recipients in .sops.yaml)
-deploys/            setup.py, upgrade.py, add_admin.py
+deploys/            setup.py, upgrade.py, reboot.py, postgres_upgrade.py, add_admin.py
 server_setup/       the package: one module per concern, its files and templates
 deploy_targets.py   which repo deploys to which host
 ```
