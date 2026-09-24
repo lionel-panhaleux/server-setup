@@ -13,9 +13,9 @@ upgrade target:
 add-host ip:
     ssh-keyscan -t ed25519 {{ ip }} | grep -v '^#' >> known_hosts
 
-# Create a sudo user on a fresh host, as root (ADMIN=deploy ADMIN_KEY=~/.ssh/deploy.pub)
-add-admin ip:
-    uv run pyinfra {{ ip }} deploys/add_admin.py --ssh-user root --data ssh_known_hosts_file=known_hosts --data ssh_strict_host_key_checking=yes -y
+# Create a sudo user on a fresh host, as root with your own key (ADMIN=deploy ADMIN_KEY=~/.ssh/deploy.pub)
+add-admin ip root_key="~/.ssh/id_ed25519":
+    uv run pyinfra {{ ip }} deploys/add_admin.py --ssh-user root --ssh-key {{ root_key }} -y
 
 # Push DEPLOY_HOST and DEPLOY_HOST_KEY to each deploy target's GitHub environment
 sync:

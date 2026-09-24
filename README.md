@@ -16,6 +16,7 @@ Apps still on Ansible pin the `ansible-final` tag, the last release of the `lion
 
 ```
 inventory.py        hosts, and what differs between them
+group_data/all.py   how every host is reached: deploy user and key, known_hosts, sudo
 known_hosts         each host's SSH key; every connection checks it strictly
 secrets.sops.yaml   encrypted secrets (sops, recipients in .sops.yaml)
 deploys/            setup.py, upgrade.py, add_admin.py
@@ -53,6 +54,8 @@ just add-host 1.2.3.4
 ADMIN=alice  ADMIN_KEY=~/.ssh/alice.pub  just add-admin 1.2.3.4
 ADMIN=deploy ADMIN_KEY=~/.ssh/deploy.pub just add-admin 1.2.3.4
 ```
+
+Root logs in with `~/.ssh/id_ed25519`; pass another key as a second argument (`just add-admin 1.2.3.4 ~/.ssh/other`).
 
 Then add it to `inventory.py`, commit `known_hosts`, and `just sync` so the apps' CI trusts the key too.
 
