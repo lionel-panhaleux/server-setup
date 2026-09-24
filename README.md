@@ -25,7 +25,7 @@ deploy_targets.py   which repo deploys to which host
 
 ## Secrets
 
-`secrets.sops.yaml` holds every secret, encrypted to the SSH public keys in `.sops.yaml` (sops uses them as age recipients). sops decrypts with `~/.ssh/id_ed25519` by default; set `SOPS_AGE_SSH_PRIVATE_KEY_FILE` to use another key, such as `~/.ssh/deploy`. Edit it in place:
+`secrets.sops.yaml` holds every secret, encrypted to the SSH public keys in `.sops.yaml` (sops uses them as age recipients). Identifiers (`*_user`, `*_access_key`) stay readable next to the secret they pair with. sops decrypts with `~/.ssh/id_ed25519` by default; set `SOPS_AGE_SSH_PRIVATE_KEY_FILE` to use another key, such as `~/.ssh/deploy`. Edit it in place:
 
 ```bash
 just secrets
