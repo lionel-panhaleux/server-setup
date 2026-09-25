@@ -15,7 +15,6 @@ PACKAGES = [
     "unattended-upgrades",
     "logrotate",
     "ufw",
-    "fail2ban",
     "gnupg",
     "nginx",
     "certbot",
@@ -86,10 +85,13 @@ def packages(postgres_version: str | None = None):
 
 
 @deploy("Services")
-def services(journal_max_use: str = "2G"):
-    jail = _put("jail.local", "/etc/fail2ban/jail.local")
-    systemd.service(name="fail2ban", service="fail2ban", running=True, enabled=True)
-    systemd.service(name="Restart fail2ban", service="fail2ban", restarted=True, _if=jail.did_change)
+def services(journal_max_use: str = "2G", fail2ban: bool = True):
+    """fail2ban=False on a small box: it holds ~70MB, and sshd already refuses passwords."""
+    if fail2ban:
+        apt.packages(name="fail2ban", packages=["fail2ban"])
+        jail = _put("jail.local", "/etc/fail2ban/jail.local")
+        systemd.service(name="fail2ban", service="fail2ban", running=True, enabled=True)
+        systemd.service(name="Restart fail2ban", service="fail2ban", restarted=True, _if=jail.did_change)
 
     journald = [
         files.directory(name="journald drop-in dir", path="/etc/systemd/journald.conf.d"),
