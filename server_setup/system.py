@@ -85,8 +85,9 @@ def packages(postgres_version: str | None = None):
 
 
 @deploy("Services")
-def services(journal_max_use: str = "2G", fail2ban: bool = True):
-    """fail2ban=False on a small box: it holds ~70MB, and sshd already refuses passwords."""
+def services(journal_max_use: str = "2G", journal_max_age: str = "", fail2ban: bool = True):
+    """fail2ban=False on a small box: it holds ~70MB, and sshd already refuses passwords.
+    journal_max_age (e.g. "1month") bounds how long logs, and the IPs in them, are kept."""
     if fail2ban:
         apt.packages(name="fail2ban", packages=["fail2ban"])
         jail = _put("jail.local", "/etc/fail2ban/jail.local")
@@ -103,6 +104,8 @@ def services(journal_max_use: str = "2G", fail2ban: bool = True):
                 "Storage=persistent\n"
                 f"SystemMaxUse={journal_max_use}\n"
                 "SystemKeepFree=500M\n"
+                # journald ages out whole files: a file must close before it can expire
+                + (f"MaxRetentionSec={journal_max_age}\nMaxFileSec=1week\n" if journal_max_age else "")
             ),
             dest="/etc/systemd/journald.conf.d/00-server-setup.conf",
             mode="644",
