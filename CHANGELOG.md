@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0.1
+
+- `put_secret` no longer prints a changed secret file under `--diff`: pyinfra runs an operation's
+  body again when it executes, after the diff switch had been restored.
+- The nightly orphan scan skips a restic repo an app declares in `/etc/postgres-backup/repos.d/`.
+
 ## 2.0.0
 
 - pyinfra replaces Ansible. The repo is the `server_setup` Python package: apps
