@@ -105,7 +105,18 @@ loki.source.journal "journal" {
     cluster  = "{{ cluster }}",
     host     = "{{ host_name }}",
   }
-  forward_to    = [loki.write.grafana_cloud.receiver]
+  forward_to    = [loki.process.mask.receiver]
+}
+
+// Credentials an app takes in a URL query (a token on an SSE stream, an OAuth
+// code): nginx's error log has no format and quotes the raw request line.
+// Every capture group is replaced, so only the value is captured.
+loki.process "mask" {
+  stage.replace {
+    expression = "[?&](?:token|code|state)=([^&\\s\"]+)"
+    replace    = "***"
+  }
+  forward_to = [loki.write.grafana_cloud.receiver]
 }
 
 // ---- Logs -> Grafana Cloud Loki ----
