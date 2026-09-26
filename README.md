@@ -181,7 +181,7 @@ Each dump is also pushed with [restic](https://restic.net) to Scaleway Object St
 
 A host's `backup_exclude` in `inventory.py` lists ephemeral databases to skip: scratch and reseeded databases churn near-full-size snapshots for backups nothing will ever restore.
 
-One database failing doesn't stop the others; the script exits nonzero so `systemctl status postgres-backup` surfaces it. A dropped or excluded database's restic repository is never pruned again, so the nightly run ends with an orphan scan (rclone lists the bucket's prefixes) that logs a warning per repository without a backed-up database; deleting one (`rclone purge` its prefix) stays a manual act.
+One database failing doesn't stop the others; the script exits nonzero so `systemctl status postgres-backup` surfaces it. A dropped or excluded database's restic repository is never pruned again, so the nightly run ends with an orphan scan (rclone lists the bucket's prefixes) that logs a warning per repository without a backed-up database, unless an app declared it its own in `/etc/postgres-backup/repos.d/`; deleting one (`rclone purge` its prefix) stays a manual act.
 
 The secrets: `remote_backup_access_key` and `remote_backup_secret_key` (a Scaleway IAM key scoped to the bucket) and `remote_backup_restic_password` (losing it means losing the backups).
 

@@ -134,6 +134,8 @@ if [ -n "${RESTIC_REPOSITORY_BASE:-}" ]; then
         for repo in $PREFIXES; do
             repo="${repo%/}"
             [ "$repo" = globals ] && continue
+            # a repo an app backs up itself, declared by its deploy
+            [ -e "/etc/postgres-backup/repos.d/$repo" ] && continue
             if ! echo "$DBS" | grep -qx "$repo" || is_excluded "$repo"; then
                 /usr/bin/logger -t postgres-backup -p user.warning \
                     "repo '$repo' has no backed-up database (dropped or excluded) — never pruned; delete its bucket prefix manually if obsolete"

@@ -56,6 +56,9 @@ def postgres_backups(
     keep_monthly: int = 12,
 ):
     files.directory(name="Backup config dir", path="/etc/postgres-backup", user="root", group="postgres", mode="750")
+    files.directory(
+        name="App-owned repos", path="/etc/postgres-backup/repos.d", user="root", group="postgres", mode="755"
+    )
     files.directory(name="Backup dir", path="/var/backups/postgres", user="postgres", group="postgres", mode="750")
     files.put(
         name="Backup settings",

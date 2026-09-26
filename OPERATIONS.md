@@ -23,7 +23,8 @@ pyinfra deploys. Every app deploys from its own repo:
 | `krcg-bot` | gravelines | `ansible/` | CI on a published release, or `just deploy` |
 | `timer` | gravelines | `ansible/` | `just deploy` |
 | `rulings-website` | gravelines | `ansible/` | `just deploy` |
-| `archon-vibe` | frankfurt | `ansible/` | its `just` recipes |
+| `archon-vibe` | frankfurt | `deploy/` | its `just` recipes |
+| `vekn-forum` | frankfurt | `deploy/` | `just deploy` |
 
 Deploys connect as `deploy`: CI with `DEPLOY_SSH_KEY`, `DEPLOY_HOST` and
 `DEPLOY_HOST_KEY`, which `just sync` / `just sync-key` push from
@@ -112,6 +113,9 @@ bucket.
 - Dropping a database does **not** prune its repo. Local dumps age out by date, but
   the bucket prefix stays forever and the nightly run logs an orphan-repo warning
   until it is deleted by hand.
+- A repo **an app backs up itself** (Discourse's own backup archives, from
+  `vekn-forum` on frankfurt) has no database either: its deploy declares it with an
+  empty file `/etc/postgres-backup/repos.d/<repo>`, which the orphan scan skips.
 - The hosts have **no named rclone remote**. `pg-backup.sh` builds an on-the-fly
   `:s3,provider=Other,env_auth:` remote from `/etc/postgres-backup/remote.env`;
   mirror that for any manual `rclone` call rather than expecting a config file.
