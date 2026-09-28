@@ -4,11 +4,12 @@ from server_setup.nginx_site import nginx_site
 from server_setup.observability import observability
 from server_setup.postgres_cluster import postgres_backups, postgres_config
 from server_setup.postgres_db import postgres_db
-from server_setup.system import firewall, nginx, packages, services, ssh, swap
+from server_setup.system import firewall, network, nginx, packages, services, ssh, swap
 
 __all__ = [
     "certificate",
     "firewall",
+    "network",
     "nginx",
     "nginx_site",
     "observability",

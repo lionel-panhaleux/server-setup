@@ -135,6 +135,20 @@ def nginx():
     _put("reload-nginx.sh", "/etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh", mode="755")
 
 
+@deploy("Network")
+def network():
+    """TCP tuned for readers on mobile links: BBR, and no slow start after idle."""
+    config = [
+        _put("modules-load-tcp_bbr.conf", "/etc/modules-load.d/tcp_bbr.conf"),
+        _put("sysctl-network.conf", "/etc/sysctl.d/60-server-setup-network.conf"),
+    ]
+    server.shell(
+        name="Apply network sysctls",
+        commands=["modprobe tcp_bbr", "sysctl -p /etc/sysctl.d/60-server-setup-network.conf"],
+        _if=any_changed(*config),
+    )
+
+
 @deploy("SSH")
 def ssh():
     config = _put("sshd_config", "/etc/ssh/sshd_config")

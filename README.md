@@ -2,7 +2,7 @@
 
 [![Test](https://github.com/lionel-panhaleux/server-setup/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/lionel-panhaleux/server-setup/actions/workflows/test.yml)
 
-[pyinfra](https://pyinfra.com) deploys for Debian/Ubuntu servers: base packages, SSH hardening, UFW, nginx + certbot, a backed-up postgres cluster and observability. It is also the `server_setup` Python package whose `nginx_site` and `postgres_db` deploys the apps call from their own repos.
+[pyinfra](https://pyinfra.com) deploys for Debian/Ubuntu servers: base packages, SSH hardening, UFW, nginx + certbot, TCP tuned for mobile readers (BBR), a backed-up postgres cluster and observability. It is also the `server_setup` Python package whose `nginx_site` and `postgres_db` deploys the apps call from their own repos.
 
 Apps still on Ansible pin the `ansible-final` tag, the last release of the `lionel_panhaleux.server_setup` collection.
 

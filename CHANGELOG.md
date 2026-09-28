@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.1.0
+
+- `network()`, run by setup: TCP congestion control is BBR, with `fq` as the default
+  qdisc (from the next boot), and `tcp_slow_start_after_idle` is off. Readers on
+  mobile links lose far less throughput to random packet loss, and a kept-alive
+  connection keeps its speed across idle gaps.
+
 ## 2.0.1
 
 - `put_secret` no longer prints a changed secret file under `--diff`: pyinfra runs an operation's
