@@ -1,0 +1,11 @@
+[Unit]
+Description=Export per-service cgroup usage for Alloy's textfile collector
+
+[Service]
+ExecStart=/bin/sh /usr/local/lib/unit-metrics.sh
+Restart=always
+RestartSec=30
+Nice=10
+
+[Install]
+WantedBy=multi-user.target

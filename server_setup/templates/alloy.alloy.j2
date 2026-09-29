@@ -4,8 +4,17 @@
 // ---- System metrics (CPU / mem / disk / network / systemd units) ----
 prometheus.exporter.unix "node" {
   include_exporter_metrics = true
+  enable_collectors        = ["systemd"]
 
-  // node_reboot_required, written by reboot-required-metric.timer
+  systemd {
+    enable_restarts = true
+    unit_include    = ".+\\.service"
+    // the distribution's boot, power and hardware plumbing
+    unit_exclude    = "(systemd-|initrd-|modprobe@|cloud-|getty|serial-getty@|sshd|emergency|rescue|rc-local|grub-|ldconfig|kmod-|netplan-|e2scrub|dpkg-|man-db|apparmor|uuidd|fstrim|apt-daily|dbus|qemu-guest).*"
+  }
+
+  // node_reboot_required from reboot-required-metric.timer, and the
+  // systemd_unit_* cgroup usage from unit-metrics.service
   textfile {
     directory = "/var/lib/alloy/textfile"
   }

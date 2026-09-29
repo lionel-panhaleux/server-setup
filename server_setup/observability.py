@@ -101,3 +101,19 @@ def observability(
     systemd.service(
         name="reboot-required-metric.timer", service="reboot-required-metric.timer", running=True, enabled=True
     )
+
+    script = files.put(
+        name="Install unit-metrics.sh",
+        src=str(HERE / "files/unit-metrics.sh"),
+        dest="/usr/local/lib/unit-metrics.sh",
+        mode="755",
+    )
+    unit = files.put(
+        name="Install unit-metrics.service",
+        src=str(HERE / "files/unit-metrics.service"),
+        dest="/etc/systemd/system/unit-metrics.service",
+        mode="644",
+    )
+    systemd.daemon_reload(name="Reload units for the unit metrics", _if=unit.did_change)
+    systemd.service(name="unit-metrics", service="unit-metrics", running=True, enabled=True)
+    systemd.service(name="Restart unit-metrics", service="unit-metrics", restarted=True, _if=any_changed(script, unit))

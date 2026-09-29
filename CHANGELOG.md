@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.2.0
+
+- Alloy's systemd collector is on, for `.service` units with restart counts, the
+  distribution's boot, power and hardware plumbing left out, and
+  `unit-metrics.service` writes each running service's memory, swap, CPU, I/O and
+  stall from its cgroup as `systemd_unit_*{unit=…}`, so a dashboard can break a
+  host's usage down by service.
+
 ## 2.1.0
 
 - `network()`, run by setup: TCP congestion control is BBR, with `fq` as the default

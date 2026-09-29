@@ -197,9 +197,10 @@ Both scripts ping a [healthchecks.io](https://healthchecks.io)-style URL: `GET <
 
 [Grafana Alloy](https://grafana.com/docs/alloy/) ships, all outbound (no firewall port opens):
 
-- node metrics (CPU, memory, disk, network, systemd units) via `prometheus.exporter.unix`
+- node metrics (CPU, memory, disk, network) via `prometheus.exporter.unix`, with its systemd collector for every `.service` but the distribution's boot, power and hardware plumbing (`systemd-*`, `initrd-*`, `modprobe@*`, `cloud-*`, …): `node_systemd_unit_state` and `node_systemd_service_restart_total`, by `name`
 - postgres metrics via `prometheus.exporter.postgres`, as an `alloy` role with `pg_monitor` over the unix socket (peer auth, no password)
 - `node_reboot_required`, through the textfile collector from `reboot-required-metric.timer`
+- each running service's cgroup usage, through the textfile collector from `unit-metrics.service`, every 30 s, by `unit`: `systemd_unit_memory_bytes`, `systemd_unit_swap_bytes`, `systemd_unit_cpu_seconds_total`, `systemd_unit_memory_stalled_seconds_total`, and `systemd_unit_io_{read,written}_bytes_total`, `systemd_unit_io_{reads,writes}_total` and `systemd_unit_io_stalled_seconds_total`. Template instances (`postgresql@17-main.service`) are read from their slice but get no I/O figures, since the io controller stops at the slice
 - the journal via `loki.source.journal`, with `SYSLOG_IDENTIFIER` as the `tag` label so dashboards filter by service (`{tag="krcg"}`)
 
 The push URLs and the `cluster` label default to this fleet's stack; `observability()` takes others. The secrets: `grafana_cloud_prom_user` and `grafana_cloud_loki_user` (the numeric instance IDs from the stack's Details page) and `grafana_cloud_prom_password` / `grafana_cloud_loki_password` (one Access Policy token with `metrics:write` and `logs:write`, used for both).
