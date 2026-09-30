@@ -72,36 +72,52 @@ def _clusters() -> list[tuple[int, int, str]]:
 
 @deploy("Postgres major upgrade")
 def postgres_upgrade(confirm: bool = False, drop_old: bool = False):
-    """UNTESTED until the first real upgrade. Installing a new major (a distro upgrade,
-    or a new postgres_version) leaves an empty NEW/main on 5433 beside OLD/main."""
+    """Installing a new major (a distro upgrade, or a new postgres_version) may leave
+    an empty NEW/main on 5433 beside OLD/main, or only NEW's binaries."""
     clusters = _clusters()
+    binaries = host.get_fact(Command, "ls -d /usr/lib/postgresql/*/bin/postgres 2>/dev/null || true") or ""
+    installed = max((int(path.split("/")[4]) for path in binaries.split()), default=0)
+    if len(clusters) == 1 and installed > clusters[0][0]:
+        clusters.append((installed, 0, "absent"))
     if len(clusters) != 2:
         logger.info(f"{host.name}: clusters {clusters}, nothing to upgrade")
         return
     (old, old_port, _), (new, new_port, _) = clusters
 
     if new_port != 5432:
-        databases = host.get_fact(
-            Command,
-            f"psql -p {new_port} -tAc \"SELECT count(*) FROM pg_database WHERE NOT datistemplate AND datname <> 'postgres'\"",
-            _sudo=True,
-            _sudo_user="postgres",
-        )
-        if databases != "0":
-            raise ValueError(f"{host.name}: {new}/main holds databases, refusing to drop it")
+        if new_port:
+            databases = host.get_fact(
+                Command,
+                f"psql -p {new_port} -tAc \"SELECT count(*) FROM pg_database WHERE NOT datistemplate AND datname <> 'postgres'\"",
+                _sudo=True,
+                _sudo_user="postgres",
+            )
+            if databases != "0":
+                raise ValueError(f"{host.name}: {new}/main holds databases, refusing to drop it")
         if not confirm:
             logger.warning(f"{host.name}: {old}/main → {new} ready (CONFIRM=1 to migrate)")
             return
         server.shell(name="Back up before migrating", commands=["systemctl start postgres-backup.service"])
-        server.shell(name=f"Drop the empty {new}/main", commands=[f"pg_dropcluster --stop {new} main"])
+        if new_port:
+            server.shell(name=f"Drop the empty {new}/main", commands=[f"pg_dropcluster --stop {new} main"])
         # dump mode: OLD/main stays intact on 5433, the rollback until drop_old
-        server.shell(name=f"Migrate {old}/main to {new}", commands=[f"pg_upgradecluster {old} main"])
+        server.shell(
+            name=f"Migrate {old}/main to {new}", commands=[f"pg_upgradecluster -v {new} --no-start {old} main"]
+        )
+        # pg_upgradecluster copies postgresql.conf and pg_hba.conf, not conf.d
+        server.shell(
+            name=f"Start {new}/main with {old}'s conf.d",
+            commands=[
+                f"cp -a /etc/postgresql/{old}/main/conf.d/. /etc/postgresql/{new}/main/conf.d/",
+                f"systemctl start postgresql@{new}-main",
+            ],
+        )
         server.shell(
             name="Refresh planner statistics",
             commands=["vacuumdb --all --analyze-in-stages"],
             _sudo_user="postgres",
         )
-        logger.warning(f"{host.name}: run setup for {new}'s conf.d, check the apps, then DROP_OLD=1")
+        logger.warning(f"{host.name}: check the apps, then DROP_OLD=1")
         return
 
     if not (confirm and drop_old):

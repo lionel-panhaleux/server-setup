@@ -13,7 +13,7 @@ upgrade target:
 reboot target:
     uv run pyinfra inventory.py deploys/reboot.py --limit {{ target }} -y
 
-# Postgres major upgrade, UNTESTED: reports, CONFIRM=1 migrates, CONFIRM=1 DROP_OLD=1 drops the old cluster
+# Postgres major upgrade: reports, CONFIRM=1 migrates, CONFIRM=1 DROP_OLD=1 drops the old cluster
 pg-upgrade target:
     uv run pyinfra inventory.py deploys/postgres_upgrade.py --limit {{ target }} -y
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.2.1
+
+- `postgres_upgrade` migrates a lone old cluster when only the new major's binaries
+  are installed, as Debian 12 to 13 leaves them, and starts the new cluster with the
+  old one's `conf.d` already in place: no setup run afterwards. Run on gravelines and
+  strasbourg, 15 to 17.
+- `postgres_config` logs through syslog, so PostgreSQL's lines reach the journal and
+  Loki on every box, not only where `postgresql.conf` had been edited by hand.
+
 ## 2.2.0
 
 - Alloy's systemd collector is on, for `.service` units with restart counts, the

@@ -87,14 +87,13 @@ just reboot frankfurt               # reboots only if required, then checks ever
 FORCE=1 just reboot frankfurt       # reboots anyway
 ```
 
-### 6. Postgres major upgrade (untested)
+### 6. Postgres major upgrade
 
-A new major arrives with a distro upgrade on Debian's packages, or with a new `packages(postgres_version=)` on PGDG. Either way the package creates an empty `NEW/main` on port 5433 beside the running `OLD/main`, and nothing migrates until:
+A new major arrives with a distro upgrade on Debian's packages, or with a new `packages(postgres_version=)` on PGDG. The package may create an empty `NEW/main` on port 5433 beside the running `OLD/main`, or install only the binaries (Debian 12 to 13 did). Either way nothing migrates until:
 
 ```bash
 just pg-upgrade frankfurt                       # reports what it would do
-CONFIRM=1 just pg-upgrade frankfurt             # backs up, drops the empty NEW/main, pg_upgradecluster OLD main
-just setup frankfurt                            # writes the new cluster's conf.d
+CONFIRM=1 just pg-upgrade frankfurt             # backs up, drops the empty NEW/main if any, pg_upgradecluster OLD main, carries conf.d over
 CONFIRM=1 DROP_OLD=1 just pg-upgrade frankfurt  # once the apps are checked: drops OLD/main and its packages
 ```
 
