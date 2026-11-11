@@ -25,6 +25,7 @@ pyinfra deploys. Every app deploys from its own repo:
 | `rulings-website` | gravelines | `ansible/` | `just deploy` |
 | `archon-vibe` | frankfurt | `deploy/` | its `just` recipes |
 | `vekn-forum` | frankfurt | `deploy/` | `just deploy` |
+| `primogen` | frankfurt | `deploy/` | `mise run deploy` |
 
 Deploys connect as `deploy`: CI with `DEPLOY_SSH_KEY`, `DEPLOY_HOST` and
 `DEPLOY_HOST_KEY`, which `just sync` / `just sync-key` push from
