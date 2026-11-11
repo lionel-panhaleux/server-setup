@@ -25,6 +25,7 @@ pyinfra deploys. Every app deploys from its own repo:
 | `rulings-website` | gravelines | `ansible/` | `just deploy` |
 | `archon-vibe` | frankfurt | `deploy/` | its `just` recipes |
 | `vekn-forum` | frankfurt | `deploy/` | `just deploy` |
+| `zero-vtes` | frankfurt | `deploy/` | a laptop: `uv run --group deploy pyinfra inventory.py deploy.py` |
 | `primogen` | frankfurt | `deploy/` | `mise run deploy` |
 
 Deploys connect as `deploy`: CI with `DEPLOY_SSH_KEY`, `DEPLOY_HOST` and
