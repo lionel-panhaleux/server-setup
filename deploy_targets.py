@@ -18,6 +18,7 @@ TARGETS = {
     "lionel-panhaleux/krcg-bot": ("gravelines", "production"),
     "lionel-panhaleux/codex-of-the-damned": ("strasbourg", "production"),
     "vtes-biased/archon-vibe": ("frankfurt", "beta"),  # archon.krcg.org
+    "lionel-panhaleux/primogen": ("frankfurt", "production"),  # mcp.krcg.org
     "vtes-biased/rulings-website": ("gravelines", "production"),
     "vtes-biased/vtes-lackeyccg": ("strasbourg", "production"),
 }

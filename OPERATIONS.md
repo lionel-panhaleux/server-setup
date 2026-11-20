@@ -26,12 +26,15 @@ pyinfra deploys. Every app deploys from its own repo:
 | `archon-vibe` | frankfurt | `deploy/` | its `just` recipes |
 | `vekn-forum` | frankfurt | `deploy/` | `just deploy` |
 | `zero-vtes` | frankfurt | `deploy/` | a laptop: `uv run --group deploy pyinfra inventory.py deploy.py` |
-| `primogen` | frankfurt | `deploy/` | `mise run deploy` |
+| `primogen` | frankfurt | `deploy/` | CI, `workflow_dispatch` of its `release` workflow, or `mise run release` |
 
 Deploys connect as `deploy`: CI with `DEPLOY_SSH_KEY`, `DEPLOY_HOST` and
 `DEPLOY_HOST_KEY`, which `just sync` / `just sync-key` push from
 `deploy_targets.py`; a laptop with `~/.ssh/deploy`. `rulings-website` and
 `archon-vibe` are listed there too, but their deploys only run from a laptop.
+The deploy key is also a sops recipient of `primogen`'s `secrets.sops.yaml`:
+rotating it breaks that release until its `.sops.yaml` names the new key and
+`sops updatekeys` re-encrypts the file.
 
 The Ansible apps pin the `ansible-final` tag of this repo, the last release of
 the `lionel_panhaleux.server_setup` collection, until they move to pyinfra.
